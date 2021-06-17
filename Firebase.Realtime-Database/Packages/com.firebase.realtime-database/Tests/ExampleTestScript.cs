@@ -1,9 +1,8 @@
-﻿// Copyright (c) ProjectAuthor. All rights reserved.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using NUnit.Framework;
 
-namespace ProjectName.Tests
+namespace Firebase.RealtimeDatabase.Tests
 {
     internal class ExampleTestScript
     {
