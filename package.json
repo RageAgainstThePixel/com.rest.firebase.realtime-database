@@ -11,6 +11,6 @@
   },
   "author": "Stephen Hodgson",
   "dependencies": {
-    "com.firebase.authentication": "1.0.0-preview.3"
+    "com.firebase.authentication": "1.0.0-preview.4"
   }
 }
