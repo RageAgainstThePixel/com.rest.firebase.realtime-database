@@ -15,7 +15,7 @@ A [Firebase](https://firebase.google.com/) Realtime Database package for the [Un
   - `Scope(s):`
     - `com.firebase`
 
-![scoped-registries](https://github.com/StephenHodgson/com.firebase.realtime-database/raw/development/Firebase.Realtime-Database/Packages/com.firebase.realtime-database/Documentation~/images/package-manager-scopes.png)
+![scoped-registries](Firebase.Realtime-Database/Packages/com.firebase.realtime-database/Documentation~/images/package-manager-scopes.png)
 
 - Open the Unity Package Manager window
 - Change the Registry from Unity to `My Registries`
