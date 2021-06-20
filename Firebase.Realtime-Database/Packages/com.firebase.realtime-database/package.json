@@ -1,16 +1,23 @@
 {
   "name": "com.firebase.realtime-database",
   "displayName": "Firebase.Realtime-Database",
-  "description": "Firebase.Realtime-Database description goes here.",
+  "description": "A simple package for working with the Firebase Realtime Database.",
   "keywords": [],
-  "version": "1.0.0-preview.1",
+  "version": "1.0.0-preview.2",
   "unity": "2019.4",
   "license": "MIT",
   "repository": {
-    "type": "git"
+    "type": "git",
+    "repository": "https://github.com/StephenHodgson/com.firebase.realtime-database.git"
   },
-  "author": "Stephen Hodgson",
+  "author": {
+    "name": "Stephen Hodgson",
+    "url": "https://github.com/StephenHodgson"
+  },
   "dependencies": {
-    "com.firebase.authentication": "1.0.0-preview.4"
+    "com.firebase.authentication": "1.0.0-preview.5"
+  },
+  "publishConfig": {
+    "registry": "https://package.openupm.com"
   }
 }
