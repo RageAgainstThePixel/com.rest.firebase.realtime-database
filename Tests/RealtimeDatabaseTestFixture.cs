@@ -1,72 +1,102 @@
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using Firebase.Authentication;
+using Firebase.Authentication.Tests;
 using Firebase.RealtimeStorage;
 using NUnit.Framework;
+using System;
+using System.Threading.Tasks;
+using UnityEngine;
 
 namespace Firebase.RealtimeDatabase.Tests
 {
     [TestFixture]
     internal class RealtimeDatabaseTestFixture
     {
-        private const string TestJsonValue = "{\"value\":42}";
+        private FirebaseRealtimeDatabaseClient databaseClient;
+        private DatabaseEndpoint<TestJson> endpoint;
 
-        [SetUp]
-        public void Setup()
+        [Serializable]
+        private class TestJson
         {
-            var authClient = new FirebaseAuthenticationClient();
-            var user = authClient.CreateUserWithEmailAndPasswordAsync("test@email.com", "tempP@ssw0rd", "test user").Result;
-            Assert.IsNotNull(user);
+            public TestJson(int value)
+            {
+                this.value = value;
+            }
+
+            [SerializeField]
+            private int value;
+
+            public int Value => value;
         }
 
         [Test]
-        public void Test_1_CreateInstance()
+        public void Test_1_Setup()
         {
             var authClient = new FirebaseAuthenticationClient();
-            var databaseClient = new FirebaseRealtimeDatabaseClient(authClient);
-            Assert.IsNotNull(databaseClient);
+            UnityTestUtils.RunAsyncTestsAsSync(async () =>
+            {
+                var user = await authClient.CreateUserWithEmailAndPasswordAsync("test@email.com", "tempP@ssw0rd", "test user");
+                Assert.IsNotNull(user);
+                databaseClient = new FirebaseRealtimeDatabaseClient(authClient);
+                Assert.IsNotNull(databaseClient);
+                endpoint = new DatabaseEndpoint<TestJson>(databaseClient, "test");
+                Assert.IsNotNull(endpoint);
+            });
         }
 
         [Test]
         public void Test_2_SetData()
         {
-            var authClient = new FirebaseAuthenticationClient();
-            var databaseClient = new FirebaseRealtimeDatabaseClient(authClient);
-            authClient.SignInWithEmailAndPasswordAsync("test@email.com", "tempP@ssw0rd").Wait();
-
-            var result = databaseClient.SetDataSnapshotAsync("test", TestJsonValue).Result;
-            Assert.IsTrue(result == TestJsonValue);
+            UnityTestUtils.RunAsyncTestsAsSync(async () =>
+            {
+                Assert.IsNotNull(endpoint);
+                var result = await endpoint.GetDataSnapshotAsync();
+                Assert.IsNull(result);
+                Assert.IsNull(endpoint.Value);
+                endpoint.Value = new TestJson(42);
+            });
         }
 
         [Test]
         public void Test_3_GetData()
         {
-            var authClient = new FirebaseAuthenticationClient();
-            var databaseClient = new FirebaseRealtimeDatabaseClient(authClient);
-            authClient.SignInWithEmailAndPasswordAsync("test@email.com", "tempP@ssw0rd").Wait();
-
-            var result = databaseClient.GetDataSnapshotAsync("test").Result;
-            Assert.IsTrue(result == TestJsonValue);
+            UnityTestUtils.RunAsyncTestsAsSync(async () =>
+            {
+                Assert.IsNotNull(endpoint);
+                var endpointResult = await endpoint.GetDataSnapshotAsync();
+                Assert.IsTrue(endpoint.Value == endpointResult);
+                Assert.IsTrue(endpoint.Value?.Value == 42);
+            });
         }
 
         [Test]
         public void Test_4_DeleteData()
         {
-            var authClient = new FirebaseAuthenticationClient();
-            var databaseClient = new FirebaseRealtimeDatabaseClient(authClient);
-            authClient.SignInWithEmailAndPasswordAsync("test@email.com", "tempP@ssw0rd").Wait();
-
-            databaseClient.DeleteDataSnapshotAsync("test").Wait();
-            var result = databaseClient.GetDataSnapshotAsync("test").Result;
-            Assert.IsNull(result);
+            UnityTestUtils.RunAsyncTestsAsSync(async () =>
+            {
+                Assert.IsNotNull(endpoint);
+                await endpoint.DeleteSnapshotAsync();
+                var result = await databaseClient.GetDataSnapshotAsync("test");
+                Assert.IsNull(result);
+                await endpoint.GetDataSnapshotAsync();
+                Assert.IsNull(endpoint.Value);
+            });
         }
 
-        [TearDown]
-        public void TearDown()
+        [Test]
+        public void Test_5_TearDown()
         {
             var authClient = new FirebaseAuthenticationClient();
-            var user = authClient.SignInWithEmailAndPasswordAsync("test@email.com", "tempP@ssw0rd").Result;
-            user.DeleteAsync().Wait();
+            UnityTestUtils.RunAsyncTestsAsSync(async () =>
+            {
+                await Task.Delay(1000);
+                var user = await authClient.SignInWithEmailAndPasswordAsync("test@email.com", "tempP@ssw0rd");
+                await user.DeleteAsync();
+                endpoint.Dispose();
+                endpoint = null;
+                databaseClient = null;
+            });
         }
     }
 }
