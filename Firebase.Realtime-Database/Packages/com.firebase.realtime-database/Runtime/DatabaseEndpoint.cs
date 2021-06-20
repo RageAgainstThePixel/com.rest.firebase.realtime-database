@@ -1,9 +1,9 @@
 ﻿// Licensed under the MIT License. See LICENSE in the project root for license information.
 
+using Firebase.Authentication;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using Firebase.Authentication;
 using UnityEngine;
 
 namespace Firebase.RealtimeStorage
@@ -12,32 +12,53 @@ namespace Firebase.RealtimeStorage
     /// Represents a database endpoint.
     /// </summary>
     /// <typeparam name="T">The value type expected at the endpoint.</typeparam>
-    public class DatabaseEndpoint<T>
+    public class DatabaseEndpoint<T> : IDisposable
     {
         /// <summary>
         /// Creates a new <see cref="DatabaseEndpoint{T}"/> instance for the specified endpoint.
         /// </summary>
         /// <param name="client">The <see cref="FirebaseAuthenticationClient"/> to use when making requests to the <see cref="EndPoint"/>.</param>
         /// <param name="endpoint">The string uri of the <see cref="EndPoint"/> relative to the <see cref="FirebaseRealtimeDatabaseClient.DatabaseEndpoint"/>.</param>
-        /// <param name="streamUpdates">Should the <see cref="DatabaseEndpoint{T}"/> stream changes from the client? (Defaults to true)</param>
+        /// <param name="streamUpdates">Should the <see cref="DatabaseEndpoint{T}"/> stream changes from the client and raise <see cref="OnValueChanged"/> events? (Defaults to true)</param>
+        /// <remarks>
+        /// Don't forget to call <see cref="Dispose()"/> if streaming value updates.
+        /// </remarks>
         public DatabaseEndpoint(FirebaseRealtimeDatabaseClient client, string endpoint, bool streamUpdates = true)
         {
             this.client = client;
             EndPoint = endpoint;
-            Task.Run(GetDataSnapshotAsync);
+            SyncDataSnapshot();
 
             if (streamUpdates)
             {
-                Task.Run(OnDatabaseUpdateAsync);
-            }
-
-            async Task OnDatabaseUpdateAsync()
-            {
-                await StreamChangesAsync(OnDatabaseEndpointValueChanged, CancellationToken.None);
+                cancellationTokenSource = new CancellationTokenSource();
+                StartStreamingEndpoint(cancellationTokenSource.Token);
             }
         }
 
+        ~DatabaseEndpoint()
+        {
+            Dispose(false);
+        }
+
+        private void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                cancellationTokenSource.Cancel();
+                cancellationTokenSource?.Dispose();
+            }
+        }
+
+        /// <inheritdoc />
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
         private readonly FirebaseRealtimeDatabaseClient client;
+        private readonly CancellationTokenSource cancellationTokenSource;
 
         /// <summary>
         /// The database endpoint.
@@ -49,7 +70,7 @@ namespace Firebase.RealtimeStorage
         /// </summary>
         public event Action<T> OnValueChanged;
 
-        private string jsonValue;
+        private string json = null;
 
         private T value;
 
@@ -63,15 +84,18 @@ namespace Firebase.RealtimeStorage
             {
                 var newValueJson = JsonUtility.ToJson(value);
 
-                if (newValueJson != jsonValue)
+                if (json != newValueJson)
                 {
-                    jsonValue = newValueJson;
+                    json = newValueJson;
                     this.value = value;
                     OnValueChanged?.Invoke(value);
-                    Task.Run(() => SetDataSnapshotAsync(jsonValue));
+                    SetDataSnapshot(json);
                 }
             }
         }
+
+        private async void SyncDataSnapshot()
+            => await GetDataSnapshotAsync();
 
         /// <summary>
         /// Manually get the current value of the <see cref="EndPoint"/>.
@@ -79,12 +103,12 @@ namespace Firebase.RealtimeStorage
         /// <returns>The current value of the <see cref="EndPoint"/>.</returns>
         public async Task<T> GetDataSnapshotAsync()
         {
-            var result = await client.GetDataSnapshotAsync(EndPoint);
+            var snapshot = await client.GetDataSnapshotAsync(EndPoint);
 
-            if (result != jsonValue)
+            if (json != snapshot)
             {
-                jsonValue = result;
-                value = JsonUtility.FromJson<T>(jsonValue);
+                json = snapshot;
+                value = JsonUtility.FromJson<T>(json);
                 OnValueChanged?.Invoke(value);
             }
 
@@ -96,7 +120,20 @@ namespace Firebase.RealtimeStorage
         /// </summary>
         /// <param name="newValue">The <see cref="newValue"/> to set at the <see cref="EndPoint"/>.</param>
         public async Task SetDataSnapshotAsync(T newValue)
-            => await SetDataSnapshotAsync(JsonUtility.ToJson(newValue));
+        {
+            var newValueJson = JsonUtility.ToJson(newValue);
+
+            if (json != newValueJson)
+            {
+                json = newValueJson;
+                value = newValue;
+                OnValueChanged?.Invoke(value);
+                await SetDataSnapshotAsync(newValueJson);
+            }
+        }
+
+        private async void SetDataSnapshot(string newValue)
+            => await SetDataSnapshotAsync(newValue);
 
         private async Task SetDataSnapshotAsync(string newValue)
         {
@@ -109,35 +146,50 @@ namespace Firebase.RealtimeStorage
         /// </summary>
         public async Task DeleteSnapshotAsync()
         {
-            await client.DeleteDataSnapshotAsync(jsonValue);
-            await GetDataSnapshotAsync();
+            json = null;
+            value = default;
+            await client.DeleteDataSnapshotAsync(json);
         }
+
+        private async void StartStreamingEndpoint(CancellationToken cancellationToken)
+            => await client.StreamDataSnapshotChangesAsync(EndPoint, OnDatabaseEndpointValueChanged, cancellationToken);
 
         /// <summary>
         /// Stream data snapshots from the <see cref="EndPoint"/>.
         /// </summary>
-        /// <param name="resultHandler">The response handler to subscribe to when streaming events are raised.</param>
-        /// <param name="cancellationToken">Cancellation token to use when streaming needs to stop.</param>
-        public async Task StreamChangesAsync(Action<FirebaseEventType, T> resultHandler, CancellationToken cancellationToken)
+        /// <param name="resultHandler">The response handler to subscribe to when streaming events are received.</param>
+        /// <remarks>
+        /// This task does not return until the database event is cancelled or the <see cref="DatabaseEndpoint{T}"/> has been disposed.
+        /// </remarks>
+        public async Task StreamChangesAsync(Action<FirebaseEventType, T> resultHandler)
         {
-            await client.StreamDataSnapshotChangesAsync(EndPoint, (eventType, stringResponse) =>
+            await client.StreamDataSnapshotChangesAsync(EndPoint, ResponseHandler, cancellationTokenSource.Token);
+
+            void ResponseHandler(FirebaseEventType eventType, StreamedSnapShotResponse snapshot)
             {
-                Debug.Log($"[{eventType}] {stringResponse.Path}\n{stringResponse.Data}");
-                resultHandler(eventType, default);
-            }, cancellationToken);
+                OnDatabaseEndpointValueChanged(eventType, snapshot);
+                resultHandler(eventType, value);
+            }
         }
 
-        private void OnDatabaseEndpointValueChanged(FirebaseEventType eventType, T updatedValue)
+        private void OnDatabaseEndpointValueChanged(FirebaseEventType eventType, StreamedSnapShotResponse snapshot)
         {
             switch (eventType)
             {
                 case FirebaseEventType.None:
                     break;
                 case FirebaseEventType.Put:
-                    break;
                 case FirebaseEventType.Patch:
+                    if (json != snapshot?.Data)
+                    {
+                        json = snapshot?.Data;
+                        value = JsonUtility.FromJson<T>(json);
+                        OnValueChanged?.Invoke(value);
+                    }
                     break;
                 case FirebaseEventType.Cancel:
+                    json = null;
+                    value = default;
                     break;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(eventType), eventType, null);
@@ -145,6 +197,6 @@ namespace Firebase.RealtimeStorage
         }
 
         /// <inheritdoc />
-        public override string ToString() => jsonValue;
+        public override string ToString() => EndPoint ?? "null";
     }
 }

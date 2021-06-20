@@ -1,12 +1,15 @@
 ﻿// Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using Firebase.Authentication;
+using Newtonsoft.Json.Linq;
 using System;
 using System.IO;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
 using UnityEngine;
 
 namespace Firebase.RealtimeStorage
@@ -22,7 +25,11 @@ namespace Firebase.RealtimeStorage
         {
             AuthenticationClient = authenticationClient;
             DatabaseEndpoint = databaseEndpoint ?? $"https://{authenticationClient.Configuration.ProjectId}-default-rtdb.firebaseio.com/";
-            HttpClient = new HttpClient();
+            HttpClient = new HttpClient(new HttpClientHandler
+            {
+                AllowAutoRedirect = true,
+                MaxAutomaticRedirections = 10,
+            });
         }
 
         /// <summary>
@@ -34,6 +41,12 @@ namespace Firebase.RealtimeStorage
 
         private HttpClient HttpClient { get; }
 
+        private async Task<string> GetAuthenticatedEndpointAsync(string endpoint)
+        {
+            var idToken = await AuthenticationClient.User.GetIdTokenAsync();
+            return $"{DatabaseEndpoint}{endpoint}.json?auth={idToken}";
+        }
+
         /// <summary>
         /// Gets data at the specified endpoint.
         /// </summary>
@@ -41,9 +54,10 @@ namespace Firebase.RealtimeStorage
         /// <returns>A Json string representation of the data at the specified endpoint.</returns>
         public async Task<string> GetDataSnapshotAsync(string endpoint)
         {
-            var idToken = await AuthenticationClient.User.GetIdTokenAsync().ConfigureAwait(false);
-            var response = await HttpClient.GetAsync($"{DatabaseEndpoint}{endpoint}.json?auth={idToken}").ConfigureAwait(false);
-            return await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            var request = await GetAuthenticatedEndpointAsync(endpoint);
+            var response = await HttpClient.GetAsync(request);
+            var message = await response.Content.ReadAsStringAsync();
+            return ValidateMessageData(message);
         }
 
         /// <summary>
@@ -55,9 +69,10 @@ namespace Firebase.RealtimeStorage
         public async Task<string> SetDataSnapshotAsync(string endpoint, string json)
         {
             HttpContent content = new StringContent(json, Encoding.UTF8, "application/json");
-            var idToken = await AuthenticationClient.User.GetIdTokenAsync().ConfigureAwait(false);
-            var response = await HttpClient.PutAsync($"{DatabaseEndpoint}{endpoint}.json?auth={idToken}", content).ConfigureAwait(false);
-            return await response.Content.ReadAsStringAsync();
+            var request = await GetAuthenticatedEndpointAsync(endpoint);
+            var response = await HttpClient.PutAsync(request, content);
+            var message = await response.Content.ReadAsStringAsync();
+            return ValidateMessageData(message);
         }
 
         /// <summary>
@@ -68,24 +83,27 @@ namespace Firebase.RealtimeStorage
         /// <param name="cancellationToken">Cancellation token to use when streaming needs to stop.</param>
         public async Task StreamDataSnapshotChangesAsync(string endpoint, Action<FirebaseEventType, StreamedSnapShotResponse> responseHandler, CancellationToken cancellationToken)
         {
-            using (var request = new HttpRequestMessage(HttpMethod.Post, $"{DatabaseEndpoint}{endpoint}"))
+            var eventType = FirebaseEventType.None;
+            var request = new HttpRequestMessage(HttpMethod.Get, await GetAuthenticatedEndpointAsync(endpoint));
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
+
+            var response = await HttpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
             {
-                var response = await HttpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                throw new HttpRequestException($"{nameof(StreamDataSnapshotChangesAsync)}::{endpoint} Failed! HTTP status code: {response.StatusCode}.");
+            }
 
-                if (!response.IsSuccessStatusCode)
-                {
-                    throw new HttpRequestException(
-                        $"{nameof(StreamDataSnapshotChangesAsync)}::{endpoint} Failed! HTTP status code: {response.StatusCode}.");
-                }
+            using (var reader = new StreamReader(await response.Content.ReadAsStreamAsync()))
+            {
                 string line;
-                FirebaseEventType eventType = FirebaseEventType.None;
-                var reader = new StreamReader(await response.Content.ReadAsStreamAsync());
 
-                while ((line = await reader.ReadLineAsync()) != null && !cancellationToken.IsCancellationRequested)
+                while ((line = await reader.ReadLineAsync()) != null &&
+                       !cancellationToken.IsCancellationRequested)
                 {
                     if (line.StartsWith("event: "))
                     {
-                        line = line.Replace("event: ", string.Empty);
+                        line = line.Substring(6).Trim();
 
                         switch (line)
                         {
@@ -120,17 +138,31 @@ namespace Firebase.RealtimeStorage
 
                     if (line.StartsWith("data: "))
                     {
-                        line = line.Replace("data: ", string.Empty).Trim();
+                        line = line.Substring(5).Trim();
 
-                        if (string.IsNullOrWhiteSpace(line))
+                        var json = ValidateMessageData(line);
+
+                        if (string.IsNullOrWhiteSpace(json))
                         {
-                            throw new InvalidOperationException($"Invalid response data detected from the database for event: {eventType}!");
+                            eventType = FirebaseEventType.Cancel;
+                            responseHandler(eventType, null);
+                            return;
                         }
 
                         if (eventType == FirebaseEventType.Put ||
                             eventType == FirebaseEventType.Patch)
                         {
-                            responseHandler(eventType, JsonUtility.FromJson<StreamedSnapShotResponse>(line));
+                            string data;
+                            var jsonResult = JObject.Parse(json);
+
+                            data = jsonResult[nameof(data)]?.Type == JTokenType.Null
+                                ? null
+                                : jsonResult[nameof(data)]?.ToString(Formatting.None);
+                            data = data?.Replace("\n", string.Empty);
+
+                            var snapShotResponse = JsonUtility.FromJson<StreamedSnapShotResponse>(json);
+                            snapShotResponse.Data = data;
+                            responseHandler(eventType, snapShotResponse);
                             eventType = FirebaseEventType.None;
                         }
                     }
@@ -144,8 +176,19 @@ namespace Firebase.RealtimeStorage
         /// <param name="endpoint">The endpoint to delete the data at.</param>
         public async Task DeleteDataSnapshotAsync(string endpoint)
         {
-            var idToken = await AuthenticationClient.User.GetIdTokenAsync().ConfigureAwait(false);
-            await HttpClient.DeleteAsync($"{DatabaseEndpoint}{endpoint}.json?auth={idToken}").ConfigureAwait(false);
+            var idToken = await AuthenticationClient.User.GetIdTokenAsync();
+            await HttpClient.DeleteAsync($"{DatabaseEndpoint}{endpoint}.json?auth={idToken}");
+        }
+
+        private static string ValidateMessageData(string message)
+        {
+            if (string.IsNullOrWhiteSpace(message) ||
+                message == "null")
+            {
+                return null;
+            }
+
+            return message.Trim();
         }
     }
 }

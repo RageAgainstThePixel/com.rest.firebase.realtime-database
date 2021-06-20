@@ -13,9 +13,6 @@ namespace Firebase.RealtimeStorage
 
         public string Path => path;
 
-        [SerializeField]
-        private string data;
-
-        public string Data => data;
+        public string Data { get; internal set; }
     }
 }
