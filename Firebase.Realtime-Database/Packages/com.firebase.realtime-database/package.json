@@ -3,12 +3,12 @@
   "displayName": "Firebase.Realtime-Database",
   "description": "A simple package for working with the Firebase Realtime Database.",
   "keywords": [],
-  "version": "1.0.0-preview.2",
+  "version": "1.0.0-preview.3",
   "unity": "2019.4",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "repository": "https://github.com/StephenHodgson/com.firebase.realtime-database.git"
+    "repository": "https://github.com/RageAgainstThePixel/com.firebase.realtime-database.git"
   },
   "author": {
     "name": "Stephen Hodgson",
