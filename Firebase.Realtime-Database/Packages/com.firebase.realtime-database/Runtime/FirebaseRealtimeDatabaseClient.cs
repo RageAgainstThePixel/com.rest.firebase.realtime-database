@@ -57,6 +57,12 @@ namespace Firebase.RealtimeStorage
             var request = await GetAuthenticatedEndpointAsync(endpoint);
             var response = await HttpClient.GetAsync(request);
             var message = await response.Content.ReadAsStringAsync();
+
+            if (message.Contains("error"))
+            {
+                throw new FirebaseRealtimeStorageException(message);
+            }
+
             return ValidateMessageData(message);
         }
 
@@ -72,6 +78,12 @@ namespace Firebase.RealtimeStorage
             var request = await GetAuthenticatedEndpointAsync(endpoint);
             var response = await HttpClient.PutAsync(request, content);
             var message = await response.Content.ReadAsStringAsync();
+
+            if (message.Contains("error"))
+            {
+                throw new FirebaseRealtimeStorageException(message);
+            }
+
             return ValidateMessageData(message);
         }
 
