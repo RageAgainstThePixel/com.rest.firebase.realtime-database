@@ -3,7 +3,7 @@
 using System;
 using UnityEngine;
 
-namespace Firebase.RealtimeStorage
+namespace Firebase.RealtimeDatabase
 {
     [Serializable]
     public class StreamedSnapShotResponse

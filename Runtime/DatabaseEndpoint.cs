@@ -6,7 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
 
-namespace Firebase.RealtimeStorage
+namespace Firebase.RealtimeDatabase
 {
     /// <summary>
     /// Represents a database endpoint.
