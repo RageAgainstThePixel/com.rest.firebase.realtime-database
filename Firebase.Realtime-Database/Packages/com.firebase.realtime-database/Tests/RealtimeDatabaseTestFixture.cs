@@ -2,7 +2,6 @@
 
 using Firebase.Authentication;
 using Firebase.Authentication.Tests;
-using Firebase.RealtimeStorage;
 using NUnit.Framework;
 using System;
 using System.Threading.Tasks;

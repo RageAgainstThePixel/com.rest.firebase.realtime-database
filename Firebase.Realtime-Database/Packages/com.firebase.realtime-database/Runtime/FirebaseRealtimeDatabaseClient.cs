@@ -12,7 +12,7 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using UnityEngine;
 
-namespace Firebase.RealtimeStorage
+namespace Firebase.RealtimeDatabase
 {
     public class FirebaseRealtimeDatabaseClient
     {
@@ -60,7 +60,7 @@ namespace Firebase.RealtimeStorage
 
             if (message.Contains("error"))
             {
-                throw new FirebaseRealtimeStorageException(message);
+                throw new FirebaseRealtimeDatabaseException(message);
             }
 
             return ValidateMessageData(message);
@@ -81,7 +81,7 @@ namespace Firebase.RealtimeStorage
 
             if (message.Contains("error"))
             {
-                throw new FirebaseRealtimeStorageException(message);
+                throw new FirebaseRealtimeDatabaseException(message);
             }
 
             return ValidateMessageData(message);

@@ -2,11 +2,11 @@
 
 using System;
 
-namespace Firebase.RealtimeStorage
+namespace Firebase.RealtimeDatabase
 {
-    public class FirebaseRealtimeStorageException : Exception
+    public class FirebaseRealtimeDatabaseException : Exception
     {
-        public FirebaseRealtimeStorageException(string message)
+        public FirebaseRealtimeDatabaseException(string message)
             : base(message.Replace("\n", string.Empty))
         {
         }
