@@ -1,6 +1,7 @@
 ﻿// Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using Firebase.Authentication;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.IO;
@@ -9,7 +10,6 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Newtonsoft.Json;
 using UnityEngine;
 
 namespace Firebase.RealtimeDatabase
@@ -193,14 +193,8 @@ namespace Firebase.RealtimeDatabase
         }
 
         private static string ValidateMessageData(string message)
-        {
-            if (string.IsNullOrWhiteSpace(message) ||
-                message == "null")
-            {
-                return null;
-            }
-
-            return message.Trim();
-        }
+            => !string.IsNullOrWhiteSpace(message) && message != "null"
+                ? message.Trim()
+                : null;
     }
 }

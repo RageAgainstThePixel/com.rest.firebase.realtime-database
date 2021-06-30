@@ -1,7 +1,10 @@
 ﻿// Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using Firebase.Authentication;
+using Newtonsoft.Json;
 using System;
+using System.Collections.Generic;
+using System.Data;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
@@ -20,13 +23,20 @@ namespace Firebase.RealtimeDatabase
         /// <param name="client">The <see cref="FirebaseAuthenticationClient"/> to use when making requests to the <see cref="EndPoint"/>.</param>
         /// <param name="endpoint">The string uri of the <see cref="EndPoint"/> relative to the <see cref="FirebaseRealtimeDatabaseClient.DatabaseEndpoint"/>.</param>
         /// <param name="streamUpdates">Should the <see cref="DatabaseEndpoint{T}"/> stream changes from the client and raise <see cref="OnValueChanged"/> events? (Defaults to true)</param>
+        /// <param name="jsonSerializerSettings">The json serializer settings to use for <see cref="T"/>.</param>
         /// <remarks>
         /// Don't forget to call <see cref="Dispose()"/> if streaming value updates.
         /// </remarks>
-        public DatabaseEndpoint(FirebaseRealtimeDatabaseClient client, string endpoint, bool streamUpdates = true)
+        public DatabaseEndpoint(FirebaseRealtimeDatabaseClient client, string endpoint, bool streamUpdates = true, JsonSerializerSettings jsonSerializerSettings = null)
         {
+            if (typeof(T).IsAbstract)
+            {
+                throw new InvalidConstraintException($"{nameof(DatabaseEndpoint<T>)} cannot use an abstract generic parameter \"{typeof(T).Name}\".");
+            }
+
             this.client = client;
             EndPoint = endpoint;
+            SerializerSettings = jsonSerializerSettings;
             SyncDataSnapshot();
 
             if (streamUpdates)
@@ -66,6 +76,11 @@ namespace Firebase.RealtimeDatabase
         public string EndPoint { get; }
 
         /// <summary>
+        /// Json serializer settings to use.
+        /// </summary>
+        public JsonSerializerSettings SerializerSettings { get; set; }
+
+        /// <summary>
         /// Event raised when <see cref="Value"/> is changed or updated.
         /// </summary>
         public event Action<T> OnValueChanged;
@@ -82,7 +97,7 @@ namespace Firebase.RealtimeDatabase
             get => value;
             set
             {
-                var newValueJson = JsonUtility.ToJson(value);
+                var newValueJson = JsonConvert.SerializeObject(value, SerializerSettings);
 
                 if (json != newValueJson)
                 {
@@ -93,6 +108,53 @@ namespace Firebase.RealtimeDatabase
                 }
             }
         }
+
+        public static implicit operator T(DatabaseEndpoint<T> endpoint) => endpoint.Value;
+
+        #region Equality
+
+        /// <inheritdoc />
+        public override bool Equals(object @object)
+        {
+            switch (@object)
+            {
+                case DatabaseEndpoint<T> otherEndpoint:
+                    return value == otherEndpoint;
+                case T otherValue:
+                    return EqualityComparer<T>.Default.Equals(otherValue, value);
+                default:
+                    return false;
+            }
+        }
+
+        public bool Equals(DatabaseEndpoint<T> other)
+            => EqualityComparer<T>.Default.Equals(value, other.value) && EndPoint == other.EndPoint;
+
+        public bool Equals(T other) => EqualityComparer<T>.Default.Equals(value, other);
+
+        /// <inheritdoc />
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                // ReSharper disable once NonReadonlyMemberInGetHashCode
+                return (EqualityComparer<T>.Default.GetHashCode(value) * 397) ^ (EndPoint != null ? EndPoint.GetHashCode() : 0);
+            }
+        }
+
+        public static bool operator ==(DatabaseEndpoint<T> endpoint, T other)
+            => endpoint != null && endpoint.Equals(other);
+
+        public static bool operator !=(DatabaseEndpoint<T> endpoint, T other)
+            => !(endpoint == other);
+
+        public static bool operator ==(T other, DatabaseEndpoint<T> endpoint)
+            => endpoint != null && endpoint.Equals(other);
+
+        public static bool operator !=(T other, DatabaseEndpoint<T> endpoint)
+            => !(other == endpoint);
+
+        #endregion Equality
 
         private async void SyncDataSnapshot()
             => await GetDataSnapshotAsync();
@@ -108,7 +170,9 @@ namespace Firebase.RealtimeDatabase
             if (json != snapshot)
             {
                 json = snapshot;
-                value = JsonUtility.FromJson<T>(json);
+                value = !string.IsNullOrWhiteSpace(json)
+                    ? JsonConvert.DeserializeObject<T>(json, SerializerSettings)
+                    : default;
                 OnValueChanged?.Invoke(value);
             }
 
@@ -121,7 +185,7 @@ namespace Firebase.RealtimeDatabase
         /// <param name="newValue">The <see cref="newValue"/> to set at the <see cref="EndPoint"/>.</param>
         public async Task SetDataSnapshotAsync(T newValue)
         {
-            var newValueJson = JsonUtility.ToJson(newValue);
+            var newValueJson = JsonConvert.SerializeObject(newValue, SerializerSettings);
 
             if (json != newValueJson)
             {
@@ -183,7 +247,9 @@ namespace Firebase.RealtimeDatabase
                     if (json != snapshot?.Data)
                     {
                         json = snapshot?.Data;
-                        value = JsonUtility.FromJson<T>(json);
+                        value = !string.IsNullOrWhiteSpace(json)
+                            ? JsonConvert.DeserializeObject<T>(json, SerializerSettings)
+                            : default;
                         OnValueChanged?.Invoke(value);
                     }
                     break;
@@ -197,6 +263,6 @@ namespace Firebase.RealtimeDatabase
         }
 
         /// <inheritdoc />
-        public override string ToString() => EndPoint ?? "null";
+        public override string ToString() => $"{EndPoint}/{json}" ?? "null";
     }
 }
