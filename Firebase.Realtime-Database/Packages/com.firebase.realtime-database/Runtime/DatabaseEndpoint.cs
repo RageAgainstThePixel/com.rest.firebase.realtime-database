@@ -119,16 +119,16 @@ namespace Firebase.RealtimeDatabase
             switch (@object)
             {
                 case DatabaseEndpoint<T> otherEndpoint:
-                    return value == otherEndpoint;
+                    return Equals(otherEndpoint);
                 case T otherValue:
-                    return EqualityComparer<T>.Default.Equals(otherValue, value);
+                    return Equals(otherValue);
                 default:
                     return false;
             }
         }
 
         public bool Equals(DatabaseEndpoint<T> other)
-            => EqualityComparer<T>.Default.Equals(value, other.value) && EndPoint == other.EndPoint;
+            => Equals(other.value) && EndPoint == other.EndPoint;
 
         public bool Equals(T other) => EqualityComparer<T>.Default.Equals(value, other);
 
@@ -142,17 +142,23 @@ namespace Firebase.RealtimeDatabase
             }
         }
 
-        public static bool operator ==(DatabaseEndpoint<T> endpoint, T other)
-            => endpoint != null && endpoint.Equals(other);
+        public static bool operator ==(DatabaseEndpoint<T> left, T right)
+            => left != null && left.Equals(right);
 
-        public static bool operator !=(DatabaseEndpoint<T> endpoint, T other)
-            => !(endpoint == other);
+        public static bool operator !=(DatabaseEndpoint<T> left, T right)
+            => !(left == right);
 
-        public static bool operator ==(T other, DatabaseEndpoint<T> endpoint)
-            => endpoint != null && endpoint.Equals(other);
+        public static bool operator ==(T left, DatabaseEndpoint<T> right)
+            => right != null && right.Equals(left);
 
-        public static bool operator !=(T other, DatabaseEndpoint<T> endpoint)
-            => !(other == endpoint);
+        public static bool operator !=(T left, DatabaseEndpoint<T> right)
+            => !(left == right);
+
+        public static bool operator ==(DatabaseEndpoint<T> left, DatabaseEndpoint<T> right)
+            => left != null && left.Equals(right);
+
+        public static bool operator !=(DatabaseEndpoint<T> left, DatabaseEndpoint<T> right)
+            => !(left == right);
 
         #endregion Equality
 
