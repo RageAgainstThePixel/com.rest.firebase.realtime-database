@@ -5,6 +5,7 @@ using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
@@ -27,15 +28,19 @@ namespace Firebase.RealtimeDatabase
         /// <remarks>
         /// Don't forget to call <see cref="Dispose()"/> if streaming value updates.
         /// </remarks>
-        public DatabaseEndpoint(FirebaseRealtimeDatabaseClient client, string endpoint, bool streamUpdates = true, JsonSerializerSettings jsonSerializerSettings = null)
+        public DatabaseEndpoint(FirebaseRealtimeDatabaseClient client, string endpoint = null, bool streamUpdates = true, JsonSerializerSettings jsonSerializerSettings = null)
         {
             if (typeof(T).IsAbstract)
             {
                 throw new InvalidConstraintException($"{nameof(DatabaseEndpoint<T>)} cannot use an abstract generic parameter \"{typeof(T).Name}\".");
             }
 
+            isCollection = typeof(T).IsCollection();
+
             this.client = client;
-            EndPoint = endpoint;
+            EndPoint = endpoint ?? $"{(isCollection ? $"{typeof(T).GetGenericArguments().FirstOrDefault().Name.ToLower()}s" : typeof(T).Name.ToLower())}";
+
+            Debug.Log($"Created {nameof(endpoint)}: {EndPoint}");
             SerializerSettings = jsonSerializerSettings;
             SyncDataSnapshot();
 
@@ -67,6 +72,7 @@ namespace Firebase.RealtimeDatabase
             GC.SuppressFinalize(this);
         }
 
+        private readonly bool isCollection;
         private readonly FirebaseRealtimeDatabaseClient client;
         private readonly CancellationTokenSource cancellationTokenSource;
 
@@ -222,7 +228,19 @@ namespace Firebase.RealtimeDatabase
         }
 
         private async void StartStreamingEndpoint(CancellationToken cancellationToken)
-            => await client.StreamDataSnapshotChangesAsync(EndPoint, OnDatabaseEndpointValueChanged, cancellationToken);
+        {
+            try
+            {
+                await client.StreamDataSnapshotChangesAsync(EndPoint, OnDatabaseEndpointValueChanged, cancellationToken);
+            }
+            catch (TaskCanceledException)
+            {
+            }
+            catch (Exception e)
+            {
+                Debug.LogError(e);
+            }
+        }
 
         /// <summary>
         /// Stream data snapshots from the <see cref="EndPoint"/>.
