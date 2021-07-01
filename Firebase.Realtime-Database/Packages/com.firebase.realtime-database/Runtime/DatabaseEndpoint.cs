@@ -2,6 +2,7 @@
 
 using Firebase.Authentication;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -109,7 +110,6 @@ namespace Firebase.RealtimeDatabase
                 {
                     json = newValueJson;
                     this.value = value;
-                    OnValueChanged?.Invoke(value);
                     SetDataSnapshot(json);
                 }
             }
@@ -182,10 +182,7 @@ namespace Firebase.RealtimeDatabase
             if (json != snapshot)
             {
                 json = snapshot;
-                value = !string.IsNullOrWhiteSpace(json)
-                    ? JsonConvert.DeserializeObject<T>(json, SerializerSettings)
-                    : default;
-                OnValueChanged?.Invoke(value);
+                ParseAndSetValue(json);
             }
 
             return Value;
@@ -203,7 +200,6 @@ namespace Firebase.RealtimeDatabase
             {
                 json = newValueJson;
                 value = newValue;
-                OnValueChanged?.Invoke(value);
                 await SetDataSnapshotAsync(newValueJson);
             }
         }
@@ -214,6 +210,7 @@ namespace Firebase.RealtimeDatabase
         private async Task SetDataSnapshotAsync(string newValue)
         {
             var result = await client.SetDataSnapshotAsync(EndPoint, newValue);
+            OnValueChanged?.Invoke(value);
             Debug.Assert(result == newValue);
         }
 
@@ -260,6 +257,40 @@ namespace Firebase.RealtimeDatabase
             }
         }
 
+        private void ParseAndSetValue(string jsonValue)
+        {
+            //if (isCollection)
+            //{
+            //    var array = JObject.Parse(jsonValue);
+            //    Type genericTypeDefinition = typeof(T).GetGenericTypeDefinition();
+            //    var objType = typeof(T).GetGenericArguments().FirstOrDefault();
+            //    Type listType = typeof(List<>).MakeGenericType(objType);
+            //    object list = Activator.CreateInstance(listType);
+            //    var result = new List<object>(array.Count);
+
+            //    foreach (var data in array)
+            //    {
+            //        if (data.Value == null)
+            //        {
+            //            continue;
+            //        }
+
+            //        var @object = JsonConvert.DeserializeObject(data.Value.ToString(), objType, SerializerSettings);
+            //        result.Add(@object);
+            //    }
+
+            //    value = (T)list;
+            //}
+            //else
+            {
+                value = !string.IsNullOrWhiteSpace(jsonValue)
+                    ? JsonConvert.DeserializeObject<T>(jsonValue, SerializerSettings)
+                    : default;
+            }
+
+            OnValueChanged?.Invoke(value);
+        }
+
         private void OnDatabaseEndpointValueChanged(FirebaseEventType eventType, StreamedSnapShotResponse snapshot)
         {
             switch (eventType)
@@ -271,10 +302,7 @@ namespace Firebase.RealtimeDatabase
                     if (json != snapshot?.Data)
                     {
                         json = snapshot?.Data;
-                        value = !string.IsNullOrWhiteSpace(json)
-                            ? JsonConvert.DeserializeObject<T>(json, SerializerSettings)
-                            : default;
-                        OnValueChanged?.Invoke(value);
+                        ParseAndSetValue(json);
                     }
                     break;
                 case FirebaseEventType.Cancel:

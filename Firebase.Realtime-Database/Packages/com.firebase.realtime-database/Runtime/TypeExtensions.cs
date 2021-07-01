@@ -8,7 +8,13 @@ namespace Firebase.RealtimeDatabase
 {
     internal static class TypeExtensions
     {
-        private static readonly Type[] collectionTypes = { typeof(IEnumerable<>), typeof(ICollection<>), typeof(IList<>), typeof(List<>) };
+        private static readonly Type[] collectionTypes =
+        {
+            typeof(IEnumerable<>),
+            typeof(ICollection<>),
+            typeof(IList<>),
+            typeof(List<>),
+        };
 
         /// <summary>
         /// Is this type a collection?
