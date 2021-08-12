@@ -64,8 +64,11 @@ namespace Firebase.RealtimeDatabase.Tests
             {
                 Assert.IsNotNull(endpoint);
                 var endpointResult = await endpoint.GetDataSnapshotAsync();
-                Assert.IsTrue(endpoint.Value == endpointResult);
-                Assert.IsTrue(endpoint.Value?.Value == 42);
+
+                TestJson testJson = endpoint;
+
+                Assert.IsTrue(endpoint == endpointResult);
+                Assert.IsTrue(testJson?.Value == 42);
             });
         }
 
@@ -84,7 +87,7 @@ namespace Firebase.RealtimeDatabase.Tests
         }
 
         [Test]
-        public void Test_5_TearDown()
+        public void Test_6_TearDown()
         {
             var authClient = new FirebaseAuthenticationClient();
             UnityTestUtils.RunAsyncTestsAsSync(async () =>
