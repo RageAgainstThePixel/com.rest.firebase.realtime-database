@@ -9,7 +9,7 @@ namespace Firebase.RealtimeDatabase
     public class StreamedSnapShotResponse
     {
         [SerializeField]
-        private string path;
+        private string path = "";
 
         public string Path => path;
 

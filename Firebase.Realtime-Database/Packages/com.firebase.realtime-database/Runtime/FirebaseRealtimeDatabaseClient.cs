@@ -108,11 +108,16 @@ namespace Firebase.RealtimeDatabase
 
             using (var reader = new StreamReader(await response.Content.ReadAsStreamAsync()))
             {
-                string line;
-
-                while ((line = await reader.ReadLineAsync()) != null &&
-                       !cancellationToken.IsCancellationRequested)
+                while (!cancellationToken.IsCancellationRequested)
                 {
+                    string line;
+
+                    if ((line = await reader.ReadLineAsync()) == null)
+                    {
+                        Debug.LogWarning($"Stream for \"{endpoint}\" ended unexpectedly!");
+                        break;
+                    }
+
                     if (line.StartsWith("event: "))
                     {
                         line = line.Substring(6).Trim();
@@ -134,13 +139,12 @@ namespace Firebase.RealtimeDatabase
                             case "keep-alive":
                                 // The data for this event is null, no action is required
                                 eventType = FirebaseEventType.None;
-                                continue;
+                                break;
                             case "cancel":
                                 // The data for this event is null
                                 // This event will be sent if the Firebase Realtime Database Rules cause a read at the requested location to no longer be allowed
                                 eventType = FirebaseEventType.Cancel;
-                                responseHandler(eventType, null);
-                                return;
+                                break;
                             case "auth_revoked":
                                 // The data for this event is a string indicating that a the credential has expired
                                 // This event will be sent when the supplied auth parameter is no longer valid
@@ -154,29 +158,30 @@ namespace Firebase.RealtimeDatabase
 
                         var json = ValidateMessageData(line);
 
-                        if (string.IsNullOrWhiteSpace(json))
+                        if (eventType == FirebaseEventType.None ||
+                            string.IsNullOrWhiteSpace(json))
                         {
-                            eventType = FirebaseEventType.Cancel;
-                            responseHandler(eventType, null);
-                            return;
+                            continue;
                         }
 
-                        if (eventType == FirebaseEventType.Put ||
-                            eventType == FirebaseEventType.Patch)
+                        string data;
+                        var jsonResult = JObject.Parse(json);
+
+                        data = jsonResult[nameof(data)]?.Type == JTokenType.Null
+                            ? null
+                            : jsonResult[nameof(data)]?.ToString(Formatting.None);
+
+                        data = data?.Replace("\n", string.Empty);
+
+                        var snapShotResponse = JsonUtility.FromJson<StreamedSnapShotResponse>(json);
+
+                        if (snapShotResponse == null)
                         {
-                            string data;
-                            var jsonResult = JObject.Parse(json);
-
-                            data = jsonResult[nameof(data)]?.Type == JTokenType.Null
-                                ? null
-                                : jsonResult[nameof(data)]?.ToString(Formatting.None);
-                            data = data?.Replace("\n", string.Empty);
-
-                            var snapShotResponse = JsonUtility.FromJson<StreamedSnapShotResponse>(json);
-                            snapShotResponse.Data = data;
-                            responseHandler(eventType, snapShotResponse);
-                            eventType = FirebaseEventType.None;
+                            snapShotResponse = new StreamedSnapShotResponse();
                         }
+
+                        snapShotResponse.Data = data;
+                        responseHandler(eventType, snapShotResponse);
                     }
                 }
             }
