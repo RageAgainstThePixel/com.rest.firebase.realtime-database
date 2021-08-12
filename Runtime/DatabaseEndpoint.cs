@@ -1,7 +1,12 @@
 ﻿// Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using Firebase.Authentication;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System;
+using System.Collections.Generic;
+using System.Data;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
@@ -20,13 +25,24 @@ namespace Firebase.RealtimeDatabase
         /// <param name="client">The <see cref="FirebaseAuthenticationClient"/> to use when making requests to the <see cref="EndPoint"/>.</param>
         /// <param name="endpoint">The string uri of the <see cref="EndPoint"/> relative to the <see cref="FirebaseRealtimeDatabaseClient.DatabaseEndpoint"/>.</param>
         /// <param name="streamUpdates">Should the <see cref="DatabaseEndpoint{T}"/> stream changes from the client and raise <see cref="OnValueChanged"/> events? (Defaults to true)</param>
+        /// <param name="jsonSerializerSettings">The json serializer settings to use for <see cref="T"/>.</param>
         /// <remarks>
         /// Don't forget to call <see cref="Dispose()"/> if streaming value updates.
         /// </remarks>
-        public DatabaseEndpoint(FirebaseRealtimeDatabaseClient client, string endpoint, bool streamUpdates = true)
+        public DatabaseEndpoint(FirebaseRealtimeDatabaseClient client, string endpoint = null, bool streamUpdates = true, JsonSerializerSettings jsonSerializerSettings = null)
         {
+            if (typeof(T).IsAbstract)
+            {
+                throw new InvalidConstraintException($"{nameof(DatabaseEndpoint<T>)} cannot use an abstract generic parameter \"{typeof(T).Name}\".");
+            }
+
+            isCollection = typeof(T).IsCollection();
+
             this.client = client;
-            EndPoint = endpoint;
+            EndPoint = endpoint ?? $"{(isCollection ? $"{typeof(T).GetGenericArguments().FirstOrDefault().Name.ToLower()}s" : typeof(T).Name.ToLower())}";
+
+            Debug.Log($"Created {nameof(endpoint)}: {EndPoint}");
+            SerializerSettings = jsonSerializerSettings;
             SyncDataSnapshot();
 
             if (streamUpdates)
@@ -57,6 +73,7 @@ namespace Firebase.RealtimeDatabase
             GC.SuppressFinalize(this);
         }
 
+        private readonly bool isCollection;
         private readonly FirebaseRealtimeDatabaseClient client;
         private readonly CancellationTokenSource cancellationTokenSource;
 
@@ -64,6 +81,11 @@ namespace Firebase.RealtimeDatabase
         /// The database endpoint.
         /// </summary>
         public string EndPoint { get; }
+
+        /// <summary>
+        /// Json serializer settings to use.
+        /// </summary>
+        public JsonSerializerSettings SerializerSettings { get; set; }
 
         /// <summary>
         /// Event raised when <see cref="Value"/> is changed or updated.
@@ -82,17 +104,69 @@ namespace Firebase.RealtimeDatabase
             get => value;
             set
             {
-                var newValueJson = JsonUtility.ToJson(value);
+                var newValueJson = JsonConvert.SerializeObject(value, SerializerSettings);
 
                 if (json != newValueJson)
                 {
                     json = newValueJson;
                     this.value = value;
-                    OnValueChanged?.Invoke(value);
                     SetDataSnapshot(json);
                 }
             }
         }
+
+        public static implicit operator T(DatabaseEndpoint<T> endpoint) => endpoint.Value;
+
+        #region Equality
+
+        /// <inheritdoc />
+        public override bool Equals(object @object)
+        {
+            switch (@object)
+            {
+                case DatabaseEndpoint<T> otherEndpoint:
+                    return Equals(otherEndpoint);
+                case T otherValue:
+                    return Equals(otherValue);
+                default:
+                    return false;
+            }
+        }
+
+        public bool Equals(DatabaseEndpoint<T> other)
+            => Equals(other.value) && EndPoint == other.EndPoint;
+
+        public bool Equals(T other) => EqualityComparer<T>.Default.Equals(value, other);
+
+        /// <inheritdoc />
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                // ReSharper disable once NonReadonlyMemberInGetHashCode
+                return (EqualityComparer<T>.Default.GetHashCode(value) * 397) ^ (EndPoint != null ? EndPoint.GetHashCode() : 0);
+            }
+        }
+
+        public static bool operator ==(DatabaseEndpoint<T> left, T right)
+            => left != null && left.Equals(right);
+
+        public static bool operator !=(DatabaseEndpoint<T> left, T right)
+            => !(left == right);
+
+        public static bool operator ==(T left, DatabaseEndpoint<T> right)
+            => right != null && right.Equals(left);
+
+        public static bool operator !=(T left, DatabaseEndpoint<T> right)
+            => !(left == right);
+
+        public static bool operator ==(DatabaseEndpoint<T> left, DatabaseEndpoint<T> right)
+            => left != null && left.Equals(right);
+
+        public static bool operator !=(DatabaseEndpoint<T> left, DatabaseEndpoint<T> right)
+            => !(left == right);
+
+        #endregion Equality
 
         private async void SyncDataSnapshot()
             => await GetDataSnapshotAsync();
@@ -108,8 +182,7 @@ namespace Firebase.RealtimeDatabase
             if (json != snapshot)
             {
                 json = snapshot;
-                value = JsonUtility.FromJson<T>(json);
-                OnValueChanged?.Invoke(value);
+                ParseAndSetValue(json);
             }
 
             return Value;
@@ -121,13 +194,12 @@ namespace Firebase.RealtimeDatabase
         /// <param name="newValue">The <see cref="newValue"/> to set at the <see cref="EndPoint"/>.</param>
         public async Task SetDataSnapshotAsync(T newValue)
         {
-            var newValueJson = JsonUtility.ToJson(newValue);
+            var newValueJson = JsonConvert.SerializeObject(newValue, SerializerSettings);
 
             if (json != newValueJson)
             {
                 json = newValueJson;
                 value = newValue;
-                OnValueChanged?.Invoke(value);
                 await SetDataSnapshotAsync(newValueJson);
             }
         }
@@ -138,6 +210,7 @@ namespace Firebase.RealtimeDatabase
         private async Task SetDataSnapshotAsync(string newValue)
         {
             var result = await client.SetDataSnapshotAsync(EndPoint, newValue);
+            OnValueChanged?.Invoke(value);
             Debug.Assert(result == newValue);
         }
 
@@ -152,7 +225,19 @@ namespace Firebase.RealtimeDatabase
         }
 
         private async void StartStreamingEndpoint(CancellationToken cancellationToken)
-            => await client.StreamDataSnapshotChangesAsync(EndPoint, OnDatabaseEndpointValueChanged, cancellationToken);
+        {
+            try
+            {
+                await client.StreamDataSnapshotChangesAsync(EndPoint, OnDatabaseEndpointValueChanged, cancellationToken);
+            }
+            catch (TaskCanceledException)
+            {
+            }
+            catch (Exception e)
+            {
+                Debug.LogError(e);
+            }
+        }
 
         /// <summary>
         /// Stream data snapshots from the <see cref="EndPoint"/>.
@@ -172,6 +257,40 @@ namespace Firebase.RealtimeDatabase
             }
         }
 
+        private void ParseAndSetValue(string jsonValue)
+        {
+            //if (isCollection)
+            //{
+            //    var array = JObject.Parse(jsonValue);
+            //    Type genericTypeDefinition = typeof(T).GetGenericTypeDefinition();
+            //    var objType = typeof(T).GetGenericArguments().FirstOrDefault();
+            //    Type listType = typeof(List<>).MakeGenericType(objType);
+            //    object list = Activator.CreateInstance(listType);
+            //    var result = new List<object>(array.Count);
+
+            //    foreach (var data in array)
+            //    {
+            //        if (data.Value == null)
+            //        {
+            //            continue;
+            //        }
+
+            //        var @object = JsonConvert.DeserializeObject(data.Value.ToString(), objType, SerializerSettings);
+            //        result.Add(@object);
+            //    }
+
+            //    value = (T)list;
+            //}
+            //else
+            {
+                value = !string.IsNullOrWhiteSpace(jsonValue)
+                    ? JsonConvert.DeserializeObject<T>(jsonValue, SerializerSettings)
+                    : default;
+            }
+
+            OnValueChanged?.Invoke(value);
+        }
+
         private void OnDatabaseEndpointValueChanged(FirebaseEventType eventType, StreamedSnapShotResponse snapshot)
         {
             switch (eventType)
@@ -183,8 +302,7 @@ namespace Firebase.RealtimeDatabase
                     if (json != snapshot?.Data)
                     {
                         json = snapshot?.Data;
-                        value = JsonUtility.FromJson<T>(json);
-                        OnValueChanged?.Invoke(value);
+                        ParseAndSetValue(json);
                     }
                     break;
                 case FirebaseEventType.Cancel:
@@ -197,6 +315,6 @@ namespace Firebase.RealtimeDatabase
         }
 
         /// <inheritdoc />
-        public override string ToString() => EndPoint ?? "null";
+        public override string ToString() => $"{EndPoint}/{json}" ?? "null";
     }
 }
