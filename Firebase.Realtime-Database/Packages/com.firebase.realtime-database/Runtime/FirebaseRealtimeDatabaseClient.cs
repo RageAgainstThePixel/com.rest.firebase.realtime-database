@@ -31,8 +31,6 @@ namespace Firebase.RealtimeDatabase
                 AllowAutoRedirect = true,
                 MaxAutomaticRedirections = 10,
             });
-
-            HttpClient.Timeout = new TimeSpan(0, 0, 15);
         }
 
         /// <summary>
