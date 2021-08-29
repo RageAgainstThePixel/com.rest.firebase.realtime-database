@@ -6,8 +6,8 @@ namespace Firebase.RealtimeDatabase
 {
     public class FirebaseRealtimeDatabaseException : Exception
     {
-        public FirebaseRealtimeDatabaseException(string message)
-            : base(message.Replace("\n", string.Empty))
+        public FirebaseRealtimeDatabaseException(string message, Exception innerException = null)
+            : base(message.Replace("\n", string.Empty), innerException)
         {
         }
     }

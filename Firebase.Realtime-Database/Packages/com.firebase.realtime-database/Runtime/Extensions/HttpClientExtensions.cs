@@ -76,10 +76,13 @@ namespace Firebase.RealtimeDatabase.Extensions
         /// <exception cref="ArgumentNullException">The <paramref name="requestUri"/> was null.</exception>
         public static Task<HttpResponseMessage> PatchAsync(this HttpClient client, Uri requestUri, HttpContent content, CancellationToken cancellationToken)
         {
-            return client.SendAsync(new HttpRequestMessage(new HttpMethod("PATCH"), requestUri)
+            using (var httpRequest = new HttpRequestMessage(new HttpMethod("PATCH"), requestUri)
             {
                 Content = content
-            }, cancellationToken);
+            })
+            {
+                return client.SendAsync(httpRequest, cancellationToken);
+            }
         }
 
         private static Uri CreateUri(string uri)
