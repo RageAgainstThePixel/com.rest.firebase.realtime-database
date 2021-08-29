@@ -157,10 +157,8 @@ namespace Firebase.RealtimeDatabase
         public async Task StreamDataSnapshotChangesAsync(string endpoint, Action<FirebaseEventType, StreamedSnapShotResponse> responseHandler, CancellationToken cancellationToken)
         {
             var eventType = FirebaseEventType.None;
-            var request = new HttpRequestMessage(HttpMethod.Get, await GetAuthenticatedEndpointAsync(endpoint));
-            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
 
-            using (var response = await HttpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken))
+            using (var response = await ListenAsync(endpoint, cancellationToken))
             {
                 if (!response.IsSuccessStatusCode)
                 {
@@ -245,8 +243,32 @@ namespace Firebase.RealtimeDatabase
                             responseHandler(eventType, snapShotResponse);
                         }
                     }
+
+                    response.RequestMessage.Dispose();
                 }
             }
+        }
+
+        private async Task<HttpResponseMessage> ListenAsync(string endpoint, CancellationToken cancellationToken)
+        {
+            // Create HTTP Client which will allow auto redirect as required by Firebase
+            HttpClientHandler httpClientHandler = new HttpClientHandler
+            {
+                AllowAutoRedirect = true
+            };
+
+            var httpClient = new HttpClient(httpClientHandler, true);
+            httpClient.BaseAddress = new Uri(DatabaseEndpoint);
+            httpClient.Timeout = TimeSpan.FromSeconds(60);
+            var requestUri = new Uri(await GetAuthenticatedEndpointAsync(endpoint));
+
+            var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
+
+            var response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            response.EnsureSuccessStatusCode();
+
+            return response;
         }
 
         /// <summary>

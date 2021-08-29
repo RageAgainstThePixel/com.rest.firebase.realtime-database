@@ -1,6 +1,7 @@
 ﻿// Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using Firebase.Authentication;
+using Firebase.RealtimeDatabase.Extensions;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
@@ -8,7 +9,6 @@ using System.Data;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Firebase.RealtimeDatabase.Extensions;
 using UnityEngine;
 
 namespace Firebase.RealtimeDatabase
@@ -30,7 +30,7 @@ namespace Firebase.RealtimeDatabase
         /// Don't forget to call <see cref="Dispose()"/> if streaming value updates.
         /// </remarks>
         public DatabaseEndpoint(FirebaseRealtimeDatabaseClient client, T value, string endpoint = null, JsonSerializerSettings jsonSerializerSettings = null)
-            : this(client, endpoint, false, jsonSerializerSettings)
+            : this(client, endpoint, true, jsonSerializerSettings)
         {
             Value = value;
         }
@@ -63,12 +63,7 @@ namespace Firebase.RealtimeDatabase
 
             if (streamUpdates)
             {
-                streamingThread = new Thread(() => StartStreamingEndpoint(cancellationTokenSource.Token))
-                {
-                    IsBackground = true
-                };
-
-                streamingThread.Start();
+                StartStreamingEndpoint(cancellationTokenSource.Token);
             }
         }
 
@@ -81,7 +76,6 @@ namespace Firebase.RealtimeDatabase
         {
             if (disposing)
             {
-                streamingThread.Join();
                 cancellationTokenSource.Cancel();
                 cancellationTokenSource?.Dispose();
             }
@@ -94,7 +88,6 @@ namespace Firebase.RealtimeDatabase
             GC.SuppressFinalize(this);
         }
 
-        private readonly Thread streamingThread;
         private readonly FirebaseRealtimeDatabaseClient client;
         private readonly CancellationTokenSource cancellationTokenSource;
 
@@ -354,7 +347,7 @@ namespace Firebase.RealtimeDatabase
             OnValueChanged?.Invoke(value);
         }
 
-        private void OnDatabaseEndpointValueChanged(FirebaseEventType eventType, StreamedSnapShotResponse snapshot)
+        private async void OnDatabaseEndpointValueChanged(FirebaseEventType eventType, StreamedSnapShotResponse snapshot)
         {
             switch (eventType)
             {
@@ -362,21 +355,8 @@ namespace Firebase.RealtimeDatabase
                     break;
                 case FirebaseEventType.Put:
                 case FirebaseEventType.Patch:
-
-                    if (snapshot.Path == "/")
-                    {
-                        if (json != snapshot.Data)
-                        {
-                            json = snapshot.Data;
-                            ParseAndSetValue(json);
-                        }
-                    }
-                    else
-                    {
-                        Debug.Log($"[{EndPoint}:{eventType}] {snapshot.Path} -> {snapshot.Data}");
-                        // TODO update partial paths.
-                    }
-
+                    var updatedValue = await GetDataSnapshotAsync();
+                    OnValueChanged?.Invoke(updatedValue);
                     break;
                 case FirebaseEventType.Cancel:
                     json = null;
