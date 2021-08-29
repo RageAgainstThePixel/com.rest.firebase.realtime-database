@@ -1,6 +1,7 @@
 ﻿// Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using Firebase.Authentication;
+using Firebase.RealtimeDatabase.Extensions;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
@@ -72,11 +73,33 @@ namespace Firebase.RealtimeDatabase
         /// <param name="endpoint">The endpoint to set the data to.</param>
         /// <param name="json">The Json string representation of the data to set at the specified endpoint.</param>
         /// <returns>The server response.</returns>
+        /// <remarks>This will completely overwrite any data already set at the endpoint.</remarks>
         public async Task<string> SetDataSnapshotAsync(string endpoint, string json)
         {
             HttpContent content = new StringContent(json, Encoding.UTF8, "application/json");
             var request = await GetAuthenticatedEndpointAsync(endpoint);
             var response = await HttpClient.PutAsync(request, content);
+            var message = await response.Content.ReadAsStringAsync();
+
+            if (message.Contains("error"))
+            {
+                throw new FirebaseRealtimeDatabaseException(message);
+            }
+
+            return ValidateMessageData(message);
+        }
+
+        /// <summary>
+        /// Updates or sets data at the specified endpoint.
+        /// </summary>
+        /// <param name="endpoint">The endpoint to set the data to.</param>
+        /// <param name="json">The Json string representation of the data to set at the specified endpoint.</param>
+        /// <returns>The server response.</returns>
+        public async Task<string> UpdateDataSnapshotAsync(string endpoint, string json)
+        {
+            HttpContent content = new StringContent(json, Encoding.UTF8, "application/json");
+            var request = await GetAuthenticatedEndpointAsync(endpoint);
+            var response = await HttpClient.PatchAsync(request, content);
             var message = await response.Content.ReadAsStringAsync();
 
             if (message.Contains("error"))
