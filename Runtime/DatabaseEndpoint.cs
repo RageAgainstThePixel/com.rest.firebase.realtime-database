@@ -23,6 +23,22 @@ namespace Firebase.RealtimeDatabase
         /// Creates a new <see cref="DatabaseEndpoint{T}"/> instance for the specified endpoint.
         /// </summary>
         /// <param name="client">The <see cref="FirebaseAuthenticationClient"/> to use when making requests to the <see cref="EndPoint"/>.</param>
+        /// <param name="value">The value to set on the database.</param>
+        /// <param name="endpoint">The string uri of the <see cref="EndPoint"/> relative to the <see cref="FirebaseRealtimeDatabaseClient.DatabaseEndpoint"/>.</param>
+        /// <param name="jsonSerializerSettings">The json serializer settings to use for <see cref="T"/>.</param>
+        /// <remarks>
+        /// Don't forget to call <see cref="Dispose()"/> if streaming value updates.
+        /// </remarks>
+        public DatabaseEndpoint(FirebaseRealtimeDatabaseClient client, T value, string endpoint = null, JsonSerializerSettings jsonSerializerSettings = null)
+            : this(client, endpoint, false, jsonSerializerSettings)
+        {
+            Value = value;
+        }
+
+        /// <summary>
+        /// Creates a new <see cref="DatabaseEndpoint{T}"/> instance for the specified endpoint.
+        /// </summary>
+        /// <param name="client">The <see cref="FirebaseAuthenticationClient"/> to use when making requests to the <see cref="EndPoint"/>.</param>
         /// <param name="endpoint">The string uri of the <see cref="EndPoint"/> relative to the <see cref="FirebaseRealtimeDatabaseClient.DatabaseEndpoint"/>.</param>
         /// <param name="streamUpdates">Should the <see cref="DatabaseEndpoint{T}"/> stream changes from the client and raise <see cref="OnValueChanged"/> events? (Defaults to true)</param>
         /// <param name="jsonSerializerSettings">The json serializer settings to use for <see cref="T"/>.</param>
@@ -36,19 +52,23 @@ namespace Firebase.RealtimeDatabase
                 throw new InvalidConstraintException($"{nameof(DatabaseEndpoint<T>)} cannot use an abstract generic parameter \"{typeof(T).Name}\".");
             }
 
-            isCollection = typeof(T).IsCollection();
+            var isCollection = typeof(T).IsCollection();
 
             this.client = client;
             EndPoint = endpoint ?? $"{(isCollection ? $"{typeof(T).GetGenericArguments().FirstOrDefault()?.Name.ToLower()}s" : typeof(T).Name.ToLower())}";
 
             Debug.Log($"Created {nameof(endpoint)}: {EndPoint}");
             SerializerSettings = jsonSerializerSettings;
-            SyncDataSnapshot();
+            cancellationTokenSource = new CancellationTokenSource();
 
             if (streamUpdates)
             {
-                cancellationTokenSource = new CancellationTokenSource();
-                StartStreamingEndpoint(cancellationTokenSource.Token);
+                streamingThread = new Thread(() => StartStreamingEndpoint(cancellationTokenSource.Token))
+                {
+                    IsBackground = true
+                };
+
+                streamingThread.Start();
             }
         }
 
@@ -61,6 +81,7 @@ namespace Firebase.RealtimeDatabase
         {
             if (disposing)
             {
+                streamingThread.Join();
                 cancellationTokenSource.Cancel();
                 cancellationTokenSource?.Dispose();
             }
@@ -73,7 +94,7 @@ namespace Firebase.RealtimeDatabase
             GC.SuppressFinalize(this);
         }
 
-        private readonly bool isCollection;
+        private readonly Thread streamingThread;
         private readonly FirebaseRealtimeDatabaseClient client;
         private readonly CancellationTokenSource cancellationTokenSource;
 
@@ -83,7 +104,7 @@ namespace Firebase.RealtimeDatabase
         public string EndPoint { get; }
 
         /// <summary>
-        /// Json serializer settings to use.
+        /// json serializer settings to use.
         /// </summary>
         public JsonSerializerSettings SerializerSettings { get; set; }
 
@@ -92,7 +113,7 @@ namespace Firebase.RealtimeDatabase
         /// </summary>
         public event Action<T> OnValueChanged;
 
-        private string json = null;
+        private string json;
 
         private T value;
 
@@ -102,20 +123,18 @@ namespace Firebase.RealtimeDatabase
         public T Value
         {
             get => value;
-            set
-            {
-                var newValueJson = JsonConvert.SerializeObject(value, SerializerSettings);
-
-                if (json != newValueJson)
-                {
-                    json = newValueJson;
-                    this.value = value;
-                    UpdateDataSnapshot(json);
-                }
-            }
+            set => UpdateDataSnapshot(value);
         }
 
-        public static implicit operator T(DatabaseEndpoint<T> endpoint) => endpoint.Value;
+        public static implicit operator T(DatabaseEndpoint<T> endpoint)
+        {
+            if (endpoint is null)
+            {
+                return default;
+            }
+
+            return endpoint.Value;
+        }
 
         #region Equality
 
@@ -205,13 +224,24 @@ namespace Firebase.RealtimeDatabase
         /// <returns>The current value of the <see cref="EndPoint"/>.</returns>
         public async Task<T> GetDataSnapshotAsync()
         {
-            var snapshot = await client.GetDataSnapshotAsync(EndPoint);
+            string snapshot;
 
-            if (json != snapshot)
+            try
             {
-                json = snapshot;
-                ParseAndSetValue(json);
+                snapshot = await client.GetDataSnapshotAsync(EndPoint, cancellationTokenSource.Token);
             }
+            catch (TaskCanceledException)
+            {
+                // Nothing
+                return default;
+            }
+            catch (Exception e)
+            {
+                throw new FirebaseRealtimeDatabaseException($"Failed to get snapshot for {EndPoint}", e);
+            }
+
+            json = snapshot;
+            ParseAndSetValue(json);
 
             return Value;
         }
@@ -224,15 +254,30 @@ namespace Firebase.RealtimeDatabase
         public async Task SetDataSnapshotAsync(T newValue)
         {
             var newValueJson = JsonConvert.SerializeObject(newValue, SerializerSettings);
+            json = newValueJson;
+            value = newValue;
+            await SetDataSnapshotAsync(newValueJson);
+        }
 
-            if (json != newValueJson)
+        private async Task SetDataSnapshotAsync(string newValue)
+        {
+            try
             {
-                json = newValueJson;
-                value = newValue;
-                await SetDataSnapshotAsync(newValueJson);
+                await client.SetDataSnapshotAsync(EndPoint, newValue, cancellationTokenSource.Token);
+                OnValueChanged?.Invoke(value);
+            }
+            catch (TaskCanceledException)
+            {
+                // Nothing
+            }
+            catch (Exception e)
+            {
+                throw new FirebaseRealtimeDatabaseException($"Failed to set snapshot for {EndPoint}\n{newValue}", e);
             }
         }
 
+        private async void UpdateDataSnapshot(T newValue)
+            => await UpdateDataSnapshotAsync(newValue);
 
         /// <summary>
         /// Manually update or set the <see cref="EndPoint"/> to the <see cref="newValue"/> provided.
@@ -241,33 +286,26 @@ namespace Firebase.RealtimeDatabase
         public async Task UpdateDataSnapshotAsync(T newValue)
         {
             var newValueJson = JsonConvert.SerializeObject(newValue, SerializerSettings);
-
-            if (json != newValueJson)
-            {
-                json = newValueJson;
-                value = newValue;
-                await UpdateDataSnapshotAsync(newValueJson);
-            }
+            json = newValueJson;
+            value = newValue;
+            await UpdateDataSnapshotAsync(newValueJson);
         }
-
-        private async void SetDataSnapshot(string newValue)
-            => await SetDataSnapshotAsync(newValue);
-
-        private async Task SetDataSnapshotAsync(string newValue)
-        {
-            var result = await client.SetDataSnapshotAsync(EndPoint, newValue);
-            OnValueChanged?.Invoke(value);
-            Debug.Assert(result == newValue);
-        }
-
-        private async void UpdateDataSnapshot(string newValue)
-            => await UpdateDataSnapshotAsync(newValue);
 
         private async Task UpdateDataSnapshotAsync(string newValue)
         {
-            var result = await client.UpdateDataSnapshotAsync(EndPoint, newValue);
-            OnValueChanged?.Invoke(value);
-            Debug.Assert(result == newValue);
+            try
+            {
+                await client.UpdateDataSnapshotAsync(EndPoint, newValue, cancellationTokenSource.Token);
+                OnValueChanged?.Invoke(value);
+            }
+            catch (TaskCanceledException)
+            {
+                // Nothing
+            }
+            catch (Exception e)
+            {
+                throw new FirebaseRealtimeDatabaseException($"Failed to update snapshot for {EndPoint}\n{newValue}", e);
+            }
         }
 
         /// <summary>
@@ -277,7 +315,19 @@ namespace Firebase.RealtimeDatabase
         {
             json = null;
             value = default;
-            await client.DeleteDataSnapshotAsync(json);
+
+            try
+            {
+                await client.DeleteDataSnapshotAsync(json, cancellationTokenSource.Token);
+            }
+            catch (TaskCanceledException)
+            {
+                // Nothing
+            }
+            catch (Exception e)
+            {
+                throw new FirebaseRealtimeDatabaseException($"Failed to delete snapshot for {EndPoint}", e);
+            }
         }
 
         private async void StartStreamingEndpoint(CancellationToken cancellationToken)
@@ -288,62 +338,19 @@ namespace Firebase.RealtimeDatabase
             }
             catch (TaskCanceledException)
             {
+                // Nothing
             }
             catch (Exception e)
             {
-                Debug.LogError(e);
-            }
-        }
-
-        /// <summary>
-        /// Stream data snapshots from the <see cref="EndPoint"/>.
-        /// </summary>
-        /// <param name="resultHandler">The response handler to subscribe to when streaming events are received.</param>
-        /// <remarks>
-        /// This task does not return until the database event is cancelled or the <see cref="DatabaseEndpoint{T}"/> has been disposed.
-        /// </remarks>
-        public async Task StreamChangesAsync(Action<FirebaseEventType, T> resultHandler)
-        {
-            await client.StreamDataSnapshotChangesAsync(EndPoint, ResponseHandler, cancellationTokenSource.Token);
-
-            void ResponseHandler(FirebaseEventType eventType, StreamedSnapShotResponse snapshot)
-            {
-                OnDatabaseEndpointValueChanged(eventType, snapshot);
-                resultHandler(eventType, value);
+                throw new FirebaseRealtimeDatabaseException($"Failed to start streaming for {EndPoint}", e);
             }
         }
 
         private void ParseAndSetValue(string jsonValue)
         {
-            //if (isCollection)
-            //{
-            //    var array = JObject.Parse(jsonValue);
-            //    Type genericTypeDefinition = typeof(T).GetGenericTypeDefinition();
-            //    var objType = typeof(T).GetGenericArguments().FirstOrDefault();
-            //    Type listType = typeof(List<>).MakeGenericType(objType);
-            //    object list = Activator.CreateInstance(listType);
-            //    var result = new List<object>(array.Count);
-
-            //    foreach (var data in array)
-            //    {
-            //        if (data.Value == null)
-            //        {
-            //            continue;
-            //        }
-
-            //        var @object = JsonConvert.DeserializeObject(data.Value.ToString(), objType, SerializerSettings);
-            //        result.Add(@object);
-            //    }
-
-            //    value = (T)list;
-            //}
-            //else
-            {
-                value = !string.IsNullOrWhiteSpace(jsonValue)
-                    ? JsonConvert.DeserializeObject<T>(jsonValue, SerializerSettings)
-                    : default;
-            }
-
+            value = !string.IsNullOrWhiteSpace(jsonValue)
+                ? JsonConvert.DeserializeObject<T>(jsonValue, SerializerSettings)
+                : default;
             OnValueChanged?.Invoke(value);
         }
 
@@ -355,11 +362,21 @@ namespace Firebase.RealtimeDatabase
                     break;
                 case FirebaseEventType.Put:
                 case FirebaseEventType.Patch:
-                    if (json != snapshot?.Data)
+
+                    if (snapshot.Path == "/")
                     {
-                        json = snapshot?.Data;
-                        ParseAndSetValue(json);
+                        if (json != snapshot.Data)
+                        {
+                            json = snapshot.Data;
+                            ParseAndSetValue(json);
+                        }
                     }
+                    else
+                    {
+                        Debug.Log($"[{EndPoint}:{eventType}] {snapshot.Path} -> {snapshot.Data}");
+                        // TODO update partial paths.
+                    }
+
                     break;
                 case FirebaseEventType.Cancel:
                     json = null;
@@ -371,6 +388,6 @@ namespace Firebase.RealtimeDatabase
         }
 
         /// <inheritdoc />
-        public override string ToString() => $"{EndPoint}/{json}" ?? "null";
+        public override string ToString() => $"{EndPoint}/{json}";
     }
 }
