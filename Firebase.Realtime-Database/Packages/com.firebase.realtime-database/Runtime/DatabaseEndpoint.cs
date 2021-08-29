@@ -2,13 +2,13 @@
 
 using Firebase.Authentication;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Firebase.RealtimeDatabase.Extensions;
 using UnityEngine;
 
 namespace Firebase.RealtimeDatabase
@@ -39,7 +39,7 @@ namespace Firebase.RealtimeDatabase
             isCollection = typeof(T).IsCollection();
 
             this.client = client;
-            EndPoint = endpoint ?? $"{(isCollection ? $"{typeof(T).GetGenericArguments().FirstOrDefault().Name.ToLower()}s" : typeof(T).Name.ToLower())}";
+            EndPoint = endpoint ?? $"{(isCollection ? $"{typeof(T).GetGenericArguments().FirstOrDefault()?.Name.ToLower()}s" : typeof(T).Name.ToLower())}";
 
             Debug.Log($"Created {nameof(endpoint)}: {EndPoint}");
             SerializerSettings = jsonSerializerSettings;
@@ -110,7 +110,7 @@ namespace Firebase.RealtimeDatabase
                 {
                     json = newValueJson;
                     this.value = value;
-                    SetDataSnapshot(json);
+                    UpdateDataSnapshot(json);
                 }
             }
         }
@@ -134,7 +134,14 @@ namespace Firebase.RealtimeDatabase
         }
 
         public bool Equals(DatabaseEndpoint<T> other)
-            => Equals(other.value) && EndPoint == other.EndPoint;
+        {
+            if (other is null)
+            {
+                return false;
+            }
+
+            return Equals(other.Value) && EndPoint == other.EndPoint;
+        }
 
         public bool Equals(T other) => EqualityComparer<T>.Default.Equals(value, other);
 
@@ -149,19 +156,40 @@ namespace Firebase.RealtimeDatabase
         }
 
         public static bool operator ==(DatabaseEndpoint<T> left, T right)
-            => left != null && left.Equals(right);
+        {
+            if (left is null)
+            {
+                return false;
+            }
+
+            return left.Equals(right);
+        }
 
         public static bool operator !=(DatabaseEndpoint<T> left, T right)
             => !(left == right);
 
         public static bool operator ==(T left, DatabaseEndpoint<T> right)
-            => right != null && right.Equals(left);
+        {
+            if (right is null)
+            {
+                return false;
+            }
+
+            return right.Equals(left);
+        }
 
         public static bool operator !=(T left, DatabaseEndpoint<T> right)
             => !(left == right);
 
         public static bool operator ==(DatabaseEndpoint<T> left, DatabaseEndpoint<T> right)
-            => left != null && left.Equals(right);
+        {
+            if (left is null)
+            {
+                return right is null;
+            }
+
+            return left.Equals(right);
+        }
 
         public static bool operator !=(DatabaseEndpoint<T> left, DatabaseEndpoint<T> right)
             => !(left == right);
@@ -192,6 +220,7 @@ namespace Firebase.RealtimeDatabase
         /// Manually set the <see cref="EndPoint"/> to the <see cref="newValue"/> provided.
         /// </summary>
         /// <param name="newValue">The <see cref="newValue"/> to set at the <see cref="EndPoint"/>.</param>
+        /// <remarks>This will completely overwrite any existing data at the endpoint.</remarks>
         public async Task SetDataSnapshotAsync(T newValue)
         {
             var newValueJson = JsonConvert.SerializeObject(newValue, SerializerSettings);
@@ -204,12 +233,39 @@ namespace Firebase.RealtimeDatabase
             }
         }
 
+
+        /// <summary>
+        /// Manually update or set the <see cref="EndPoint"/> to the <see cref="newValue"/> provided.
+        /// </summary>
+        /// <param name="newValue">The <see cref="newValue"/> to set at the <see cref="EndPoint"/>.</param>
+        public async Task UpdateDataSnapshotAsync(T newValue)
+        {
+            var newValueJson = JsonConvert.SerializeObject(newValue, SerializerSettings);
+
+            if (json != newValueJson)
+            {
+                json = newValueJson;
+                value = newValue;
+                await UpdateDataSnapshotAsync(newValueJson);
+            }
+        }
+
         private async void SetDataSnapshot(string newValue)
             => await SetDataSnapshotAsync(newValue);
 
         private async Task SetDataSnapshotAsync(string newValue)
         {
             var result = await client.SetDataSnapshotAsync(EndPoint, newValue);
+            OnValueChanged?.Invoke(value);
+            Debug.Assert(result == newValue);
+        }
+
+        private async void UpdateDataSnapshot(string newValue)
+            => await UpdateDataSnapshotAsync(newValue);
+
+        private async Task UpdateDataSnapshotAsync(string newValue)
+        {
+            var result = await client.UpdateDataSnapshotAsync(EndPoint, newValue);
             OnValueChanged?.Invoke(value);
             Debug.Assert(result == newValue);
         }

@@ -4,7 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace Firebase.RealtimeDatabase
+namespace Firebase.RealtimeDatabase.Extensions
 {
     internal static class TypeExtensions
     {
