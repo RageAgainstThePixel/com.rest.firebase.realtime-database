@@ -9,7 +9,6 @@ using System.Data;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using UnityEngine;
 
 namespace Firebase.RealtimeDatabase
 {
@@ -57,7 +56,6 @@ namespace Firebase.RealtimeDatabase
             this.client = client;
             EndPoint = endpoint ?? $"{(isCollection ? $"{typeof(T).GetGenericArguments().FirstOrDefault()?.Name.ToLower()}s" : typeof(T).Name.ToLower())}";
 
-            Debug.Log($"Created {nameof(endpoint)}: {EndPoint}");
             SerializerSettings = jsonSerializerSettings;
             cancellationTokenSource = new CancellationTokenSource();
 
@@ -74,10 +72,12 @@ namespace Firebase.RealtimeDatabase
 
         private void Dispose(bool disposing)
         {
+            cancellationTokenSource?.Cancel();
+
             if (disposing)
             {
-                cancellationTokenSource.Cancel();
                 cancellationTokenSource?.Dispose();
+                cancellationTokenSource = null;
             }
         }
 
@@ -89,7 +89,7 @@ namespace Firebase.RealtimeDatabase
         }
 
         private readonly FirebaseRealtimeDatabaseClient client;
-        private readonly CancellationTokenSource cancellationTokenSource;
+        private CancellationTokenSource cancellationTokenSource;
 
         /// <summary>
         /// The database endpoint.
@@ -223,7 +223,7 @@ namespace Firebase.RealtimeDatabase
             {
                 snapshot = await client.GetDataSnapshotAsync(EndPoint, cancellationTokenSource.Token);
             }
-            catch (TaskCanceledException)
+            catch (OperationCanceledException)
             {
                 // Nothing
                 return default;
@@ -259,7 +259,7 @@ namespace Firebase.RealtimeDatabase
                 await client.SetDataSnapshotAsync(EndPoint, newValue, cancellationTokenSource.Token);
                 OnValueChanged?.Invoke(value);
             }
-            catch (TaskCanceledException)
+            catch (OperationCanceledException)
             {
                 // Nothing
             }
@@ -291,7 +291,7 @@ namespace Firebase.RealtimeDatabase
                 await client.UpdateDataSnapshotAsync(EndPoint, newValue, cancellationTokenSource.Token);
                 OnValueChanged?.Invoke(value);
             }
-            catch (TaskCanceledException)
+            catch (OperationCanceledException)
             {
                 // Nothing
             }
@@ -313,7 +313,7 @@ namespace Firebase.RealtimeDatabase
             {
                 await client.DeleteDataSnapshotAsync(json, cancellationTokenSource.Token);
             }
-            catch (TaskCanceledException)
+            catch (OperationCanceledException)
             {
                 // Nothing
             }
@@ -329,9 +329,9 @@ namespace Firebase.RealtimeDatabase
             {
                 await client.StreamDataSnapshotChangesAsync(EndPoint, OnDatabaseEndpointValueChanged, cancellationToken);
             }
-            catch (TaskCanceledException)
+            catch (OperationCanceledException)
             {
-                // Nothing
+                // nothing
             }
             catch (Exception e)
             {

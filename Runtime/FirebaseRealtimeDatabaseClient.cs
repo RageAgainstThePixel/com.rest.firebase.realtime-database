@@ -240,6 +240,7 @@ namespace Firebase.RealtimeDatabase
                             }
 
                             snapShotResponse.Data = data;
+                            cancellationToken.ThrowIfCancellationRequested();
                             responseHandler(eventType, snapShotResponse);
                         }
                     }
