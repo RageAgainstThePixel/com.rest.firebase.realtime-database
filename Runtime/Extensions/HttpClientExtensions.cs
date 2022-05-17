@@ -13,6 +13,8 @@ namespace Firebase.RealtimeDatabase.Extensions
     /// </summary>
     internal static class HttpClientExtensions
     {
+        private static readonly HttpMethod patch = new HttpMethod("PATCH");
+
         /// <summary>
         /// Send a PATCH request to the specified Uri as an asynchronous operation.
         /// </summary>
@@ -26,7 +28,7 @@ namespace Firebase.RealtimeDatabase.Extensions
         /// <exception cref="ArgumentNullException">The <paramref name="requestUri"/> was null.</exception>
         public static Task<HttpResponseMessage> PatchAsync(this HttpClient client, string requestUri, HttpContent content)
         {
-            return client.PatchAsync(CreateUri(requestUri), content);
+            return PatchAsync(client, CreateUri(requestUri), content);
         }
 
         /// <summary>
@@ -42,7 +44,7 @@ namespace Firebase.RealtimeDatabase.Extensions
         /// <exception cref="ArgumentNullException">The <paramref name="requestUri"/> was null.</exception>
         public static Task<HttpResponseMessage> PatchAsync(this HttpClient client, Uri requestUri, HttpContent content)
         {
-            return client.PatchAsync(requestUri, content, CancellationToken.None);
+            return PatchAsync(client, requestUri, content, CancellationToken.None);
         }
 
         /// <summary>
@@ -59,7 +61,7 @@ namespace Firebase.RealtimeDatabase.Extensions
         /// <exception cref="ArgumentNullException">The <paramref name="requestUri"/> was null.</exception>
         public static Task<HttpResponseMessage> PatchAsync(this HttpClient client, string requestUri, HttpContent content, CancellationToken cancellationToken)
         {
-            return client.PatchAsync(CreateUri(requestUri), content, cancellationToken);
+            return PatchAsync(client, CreateUri(requestUri), content, cancellationToken);
         }
 
         /// <summary>
@@ -76,11 +78,9 @@ namespace Firebase.RealtimeDatabase.Extensions
         /// <exception cref="ArgumentNullException">The <paramref name="requestUri"/> was null.</exception>
         public static Task<HttpResponseMessage> PatchAsync(this HttpClient client, Uri requestUri, HttpContent content, CancellationToken cancellationToken)
         {
-            using (var httpRequest = new HttpRequestMessage(new HttpMethod("PATCH"), requestUri)
+            using (var httpRequest = new HttpRequestMessage(patch, requestUri))
             {
-                Content = content
-            })
-            {
+                httpRequest.Content = content;
                 return client.SendAsync(httpRequest, cancellationToken);
             }
         }

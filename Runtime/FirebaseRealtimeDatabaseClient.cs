@@ -1,7 +1,6 @@
 ﻿// Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using Firebase.Authentication;
-using Firebase.RealtimeDatabase.Extensions;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
@@ -12,6 +11,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
+using HttpClientExtensions = Firebase.RealtimeDatabase.Extensions.HttpClientExtensions;
 
 namespace Firebase.RealtimeDatabase
 {
@@ -135,7 +135,7 @@ namespace Firebase.RealtimeDatabase
             HttpContent content = new StringContent(json, Encoding.UTF8, "application/json");
             var request = await GetAuthenticatedEndpointAsync(endpoint);
 
-            using (var response = await HttpClient.PatchAsync(request, content, cancellationToken))
+            using (var response = await HttpClientExtensions.PatchAsync(HttpClient, request, content, cancellationToken))
             {
                 var message = await response.Content.ReadAsStringAsync();
 
