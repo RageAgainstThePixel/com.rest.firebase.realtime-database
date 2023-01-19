@@ -15,6 +15,7 @@ A [Firebase](https://firebase.google.com/) Realtime Database package for the [Un
   - `URL: https://package.openupm.com`
   - `Scope(s):`
     - `com.firebase`
+    - `com.utilities`
 
 ![scoped-registries](Firebase.Realtime-Database/Packages/com.firebase.realtime-database/Documentation~/images/package-manager-scopes.png)
 
