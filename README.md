@@ -1,9 +1,11 @@
 # Firebase.Realtime-Database
 
-A [Firebase](https://firebase.google.com/) Realtime Database package for the [Unity](https://unity.com/) Game Engine.
+A non-official [Firebase](https://firebase.google.com/) Realtime Database RESTful client for the [Unity](https://unity.com/) Game Engine.
 
 [![Discord](https://img.shields.io/discord/855294214065487932.svg?label=&logo=discord&logoColor=ffffff&color=7389D8&labelColor=6A7EC2)](https://discord.gg/xQgMW9ufN4)
-[![openupm](https://img.shields.io/npm/v/com.firebase.realtime-database?label=openupm&registry_uri=https://package.openupm.com)](https://openupm.com/packages/com.firebase.realtime-database/)
+[![openupm](https://img.shields.io/npm/v/com.rest.firebase.realtime-database?label=openupm&registry_uri=https://package.openupm.com)](https://openupm.com/packages/com.rest.firebase.realtime-database/)
+
+***All copyrights, trademarks, logos, and assets are the property of their respective owners.***
 
 ## Installing
 
@@ -14,10 +16,9 @@ A [Firebase](https://firebase.google.com/) Realtime Database package for the [Un
   - `Name: OpenUPM`
   - `URL: https://package.openupm.com`
   - `Scope(s):`
-    - `com.firebase`
-    - `com.utilities`
+    - `com.rest.firebase`
 
-![scoped-registries](Firebase.Realtime-Database/Packages/com.firebase.realtime-database/Documentation~/images/package-manager-scopes.png)
+![scoped-registries](Firebase.Realtime-Database/Packages/com.rest.firebase.realtime-database/Documentation~/images/package-manager-scopes.png)
 
 - Open the Unity Package Manager window
 - Change the Registry from Unity to `My Registries`
@@ -26,9 +27,13 @@ A [Firebase](https://firebase.google.com/) Realtime Database package for the [Un
 ### Via Unity Package Manager and Git url
 
 - Open your Unity Package Manager
-- Add package from git url: `https://github.com/RageAgainstThePixel/com.firebase.realtime-database.git#upm`
+- Add package from git url: `https://github.com/RageAgainstThePixel/com.rest.firebase.realtime-database.git#upm`
+  > Note: this repo has dependencies on other repositories! You are responsible for adding these on your own.
+  - [com.rest.firebase.authentication](https://github.com/RageAgainstThePixel/com.rest.firebase.authentication)
 
-## Getting Started
+---
+
+## Documentation
 
 ```csharp
 // Create a firebase authentication client
@@ -53,5 +58,5 @@ await dbClient.DeleteDataSnapshotAsync("test");
 
 ## Additional Packages
 
-- [Firebase.Authentication](https://github.com/RageAgainstThePixel/com.firebase.authentication)
-- [Firebase.Storage](https://github.com/RageAgainstThePixel/com.firebase.storage)
+- [Firebase.Authentication](https://github.com/RageAgainstThePixel/com.rest.firebase.authentication)
+- [Firebase.Storage](https://github.com/RageAgainstThePixel/com.rest.firebase.storage)

@@ -43,11 +43,11 @@
       "name": "OpenUPM",
       "url": "https://package.openupm.com",
       "scopes": [
-        "com.firebase"
+        "com.rest"
       ]
     }
   ],
   "testables": [
-    "com.firebase.authentication"
+    "com.rest.firebase.authentication"
   ]
 }

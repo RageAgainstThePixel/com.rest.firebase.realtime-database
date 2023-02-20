@@ -13,5 +13,5 @@ jobs:
         fetch-depth: 0
     - name: upm subtree split
       run: |
-        git subtree split --prefix="Firebase.Realtime-Database/Packages/com.firebase.realtime-database" -b upm
+        git subtree split --prefix="Firebase.Realtime-Database/Packages/com.rest.firebase.realtime-database" -b upm
         git push -u origin upm
