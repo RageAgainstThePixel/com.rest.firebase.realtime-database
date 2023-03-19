@@ -1,7 +1,9 @@
 {
     "name": "Firebase.RealtimeDatabase",
+    "rootNamespace": "Firebase.RealtimeDatabase",
     "references": [
-        "GUID:77dedea14cd0e914d982cd9a218098eb"
+        "GUID:77dedea14cd0e914d982cd9a218098eb",
+        "GUID:a6609af893242c7438d701ddd4cce46a"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

@@ -1,13 +1,13 @@
 ﻿// Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using Firebase.Authentication;
+using Firebase.RealtimeDatabase.Extensions;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.IO;
 using System.Net.Http;
 using System.Net.Http.Headers;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
@@ -43,109 +43,107 @@ namespace Firebase.RealtimeDatabase
 
         private async Task<string> GetAuthenticatedEndpointAsync(string endpoint)
         {
-            var idToken = await AuthenticationClient.User.GetIdTokenAsync();
+            var idToken = await AuthenticationClient.User.GetIdTokenAsync().ConfigureAwait(false);
             return $"{DatabaseEndpoint}{endpoint}.json?auth={idToken}";
         }
 
-        /// <summary>
-        /// Gets data at the specified endpoint.
-        /// </summary>
-        /// <param name="endpoint">The endpoint to get the data from.</param>
-        /// <returns>A Json string representation of the data at the specified endpoint.</returns>
-        public async Task<string> GetDataSnapshotAsync(string endpoint)
-            => await GetDataSnapshotAsync(endpoint, CancellationToken.None);
+        [Obsolete("Use GetSnapshotAsync instead")]
+        public async Task<string> GetDataSnapshotAsync(string endpoint, CancellationToken cancellationToken = default)
+            => await GetSnapshotAsync(endpoint, cancellationToken).ConfigureAwait(false);
 
         /// <summary>
         /// Gets data at the specified endpoint.
         /// </summary>
         /// <param name="endpoint">The endpoint to get the data from.</param>
-        /// <param name="cancellationToken"></param>
+        /// <param name="cancellationToken">Optional, <see cref="CancellationToken"/></param>
         /// <returns>A Json string representation of the data at the specified endpoint.</returns>
-        public async Task<string> GetDataSnapshotAsync(string endpoint, CancellationToken cancellationToken)
+        public async Task<string> GetSnapshotAsync(string endpoint, CancellationToken cancellationToken = default)
         {
-            var request = await GetAuthenticatedEndpointAsync(endpoint);
+            var request = await GetAuthenticatedEndpointAsync(endpoint).ConfigureAwait(false);
+            using var response = await HttpClient.GetAsync(request, cancellationToken).ConfigureAwait(false);
+            var message = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
 
-            using (var response = await HttpClient.GetAsync(request, cancellationToken))
+            if (message.Contains("error"))
             {
-                var message = await response.Content.ReadAsStringAsync();
-
-                if (message.Contains("error"))
-                {
-                    throw new FirebaseRealtimeDatabaseException(message);
-                }
-
-                return ValidateMessageData(message);
+                throw new FirebaseRealtimeDatabaseException(message);
             }
+
+            return ValidateMessageData(message);
         }
+
+        [Obsolete("Use PutSnapshotAsync instead")]
+        public async Task<string> SetDataSnapshotAsync(string endpoint, string json, CancellationToken cancellationToken = default)
+            => await PutSnapshotAsync(endpoint, json, cancellationToken).ConfigureAwait(false);
 
         /// <summary>
         /// Sets data at the specified endpoint.
         /// </summary>
         /// <param name="endpoint">The endpoint to set the data to.</param>
         /// <param name="json">The Json string representation of the data to set at the specified endpoint.</param>
+        /// <param name="cancellationToken">Optional, <see cref="CancellationToken"/></param>
         /// <returns>The server response.</returns>
         /// <remarks>This will completely overwrite any data already set at the endpoint.</remarks>
-        public async Task<string> SetDataSnapshotAsync(string endpoint, string json)
-            => await SetDataSnapshotAsync(endpoint, json, CancellationToken.None);
-
-        /// <summary>
-        /// Sets data at the specified endpoint.
-        /// </summary>
-        /// <param name="endpoint">The endpoint to set the data to.</param>
-        /// <param name="json">The Json string representation of the data to set at the specified endpoint.</param>
-        /// <param name="cancellationToken"></param>
-        /// <returns>The server response.</returns>
-        /// <remarks>This will completely overwrite any data already set at the endpoint.</remarks>
-        public async Task<string> SetDataSnapshotAsync(string endpoint, string json, CancellationToken cancellationToken)
+        public async Task<string> PutSnapshotAsync(string endpoint, string json, CancellationToken cancellationToken = default)
         {
-            HttpContent content = new StringContent(json, Encoding.UTF8, "application/json");
-            var request = await GetAuthenticatedEndpointAsync(endpoint);
+            var request = await GetAuthenticatedEndpointAsync(endpoint).ConfigureAwait(false);
+            using var response = await HttpClient.PutAsync(request, json.ToJsonStringContent(), cancellationToken).ConfigureAwait(false);
+            var message = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
 
-            using (var response = await HttpClient.PutAsync(request, content, cancellationToken))
+            if (message.Contains("error"))
             {
-                var message = await response.Content.ReadAsStringAsync();
-
-                if (message.Contains("error"))
-                {
-                    throw new FirebaseRealtimeDatabaseException(message);
-                }
-
-                return ValidateMessageData(message);
+                throw new FirebaseRealtimeDatabaseException(message);
             }
+
+            return ValidateMessageData(message);
         }
 
         /// <summary>
-        /// Updates or sets data at the specified endpoint.
+        /// Posts data at the specified endpoint.<br/>
+        /// This is equivalent to the JavaScript push() function.
         /// </summary>
         /// <param name="endpoint">The endpoint to set the data to.</param>
         /// <param name="json">The Json string representation of the data to set at the specified endpoint.</param>
+        /// <param name="cancellationToken">Optional, <see cref="CancellationToken"/></param>
         /// <returns>The server response.</returns>
-        public async Task<string> UpdateDataSnapshotAsync(string endpoint, string json)
-            => await UpdateDataSnapshotAsync(endpoint, json, CancellationToken.None);
+        public async Task<string> PostSnapShotAsync(string endpoint, string json, CancellationToken cancellationToken = default)
+        {
+            var request = await GetAuthenticatedEndpointAsync(endpoint).ConfigureAwait(false);
+            using var response = await HttpClient.PostAsync(request, json.ToJsonStringContent(), cancellationToken).ConfigureAwait(false);
+            var message = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+
+            if (message.Contains("error"))
+            {
+                throw new FirebaseRealtimeDatabaseException(message);
+            }
+
+            return ValidateMessageData(message);
+        }
+
+        [Obsolete("Use PatchSnapshotAsync instead")]
+        public async Task<string> UpdateDataSnapshotAsync(string endpoint, string json, CancellationToken cancellationToken = default)
+            => await PatchSnapshotAsync(endpoint, json, cancellationToken).ConfigureAwait(false);
 
         /// <summary>
-        /// Updates or sets data at the specified endpoint.
+        /// Patch data at the specified endpoint without overwriting existing data.
+        /// Named children in the data being written with Patch are overwritten, but omitted children are not deleted.<br/>
+        /// This is equivalent to the JavaScript update() function.
         /// </summary>
         /// <param name="endpoint">The endpoint to set the data to.</param>
         /// <param name="json">The Json string representation of the data to set at the specified endpoint.</param>
-        /// <param name="cancellationToken"></param>
+        /// <param name="cancellationToken">Optional, <see cref="CancellationToken"/></param>
         /// <returns>The server response.</returns>
-        public async Task<string> UpdateDataSnapshotAsync(string endpoint, string json, CancellationToken cancellationToken)
+        public async Task<string> PatchSnapshotAsync(string endpoint, string json, CancellationToken cancellationToken = default)
         {
-            HttpContent content = new StringContent(json, Encoding.UTF8, "application/json");
-            var request = await GetAuthenticatedEndpointAsync(endpoint);
+            var request = await GetAuthenticatedEndpointAsync(endpoint).ConfigureAwait(false);
+            using var response = await HttpClientExtensions.PatchAsync(HttpClient, request, json.ToJsonStringContent(), cancellationToken).ConfigureAwait(false);
+            var message = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
 
-            using (var response = await HttpClientExtensions.PatchAsync(HttpClient, request, content, cancellationToken))
+            if (message.Contains("error"))
             {
-                var message = await response.Content.ReadAsStringAsync();
-
-                if (message.Contains("error"))
-                {
-                    throw new FirebaseRealtimeDatabaseException(message);
-                }
-
-                return ValidateMessageData(message);
+                throw new FirebaseRealtimeDatabaseException(message);
             }
+
+            return ValidateMessageData(message);
         }
 
         /// <summary>
@@ -153,104 +151,84 @@ namespace Firebase.RealtimeDatabase
         /// </summary>
         /// <param name="endpoint">The endpoint to stream data snapshots from.</param>
         /// <param name="responseHandler">The response handler to subscribe to when streaming events are raised.</param>
-        /// <param name="cancellationToken">Cancellation token to use when streaming needs to stop.</param>
-        public async Task StreamDataSnapshotChangesAsync(string endpoint, Action<FirebaseEventType, StreamedSnapShotResponse> responseHandler, CancellationToken cancellationToken)
+        /// <param name="cancellationToken">Optional, <see cref="CancellationToken"/> to use when streaming needs to be stopped.</param>
+        public async Task StreamDataSnapshotChangesAsync(string endpoint, Action<FirebaseEventType, StreamedSnapShotResponse> responseHandler, CancellationToken cancellationToken = default)
         {
             var eventType = FirebaseEventType.None;
+            using var response = await ListenAsync(endpoint, cancellationToken).ConfigureAwait(false);
 
-            using (var response = await ListenAsync(endpoint, cancellationToken))
+            if (!response.IsSuccessStatusCode)
             {
-                if (!response.IsSuccessStatusCode)
+                throw new HttpRequestException($"{nameof(StreamDataSnapshotChangesAsync)}::{endpoint} Failed! HTTP status code: {response.StatusCode}.");
+            }
+
+            using var reader = new StreamReader(await response.Content.ReadAsStreamAsync().ConfigureAwait(false));
+
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                string line;
+
+                if ((line = await reader.ReadLineAsync().ConfigureAwait(false)) == null)
                 {
-                    throw new HttpRequestException($"{nameof(StreamDataSnapshotChangesAsync)}::{endpoint} Failed! HTTP status code: {response.StatusCode}.");
+                    Debug.LogWarning($"Stream for \"{endpoint}\" ended unexpectedly!");
+                    break;
                 }
 
-                using (var reader = new StreamReader(await response.Content.ReadAsStreamAsync()))
+                if (line.StartsWith("event: "))
                 {
-                    while (!cancellationToken.IsCancellationRequested)
+                    line = line[6..].Trim();
+
+                    eventType = line switch
                     {
-                        string line;
+                        // The JSON-encoded data will be an object with two keys: path and data
+                        // The path points to a location relative to the request URL
+                        //    The client should replace all of the data at that location in its cache with the data given in the message
+                        "put" => FirebaseEventType.Put,
+                        // The JSON-encoded data will be an object with two keys: path and data
+                        //    The path points to a location relative to the request URL
+                        // For each key in the data, the client should replace the corresponding key in its cache with the data for that key in the message
+                        "patch" => FirebaseEventType.Patch,
+                        // The data for this event is null, no action is required
+                        "keep-alive" => FirebaseEventType.None,
+                        // The data for this event is null
+                        // This event will be sent if the Firebase Realtime Database Rules cause a read at the requested location to no longer be allowed
+                        "cancel" => FirebaseEventType.Cancel,
+                        // The data for this event is a string indicating that a the credential has expired
+                        // This event will be sent when the supplied auth parameter is no longer valid
+                        "auth_revoked" => throw new UnauthorizedAccessException("The credentials have expired!"),
+                        _ => eventType
+                    };
+                }
 
-                        if ((line = await reader.ReadLineAsync()) == null)
-                        {
-                            Debug.LogWarning($"Stream for \"{endpoint}\" ended unexpectedly!");
-                            break;
-                        }
+                if (line.StartsWith("data: "))
+                {
+                    line = line[5..].Trim();
 
-                        if (line.StartsWith("event: "))
-                        {
-                            line = line.Substring(6).Trim();
+                    var json = ValidateMessageData(line);
 
-                            switch (line)
-                            {
-                                case "put":
-                                    // The JSON-encoded data will be an object with two keys: path and data
-                                    // The path points to a location relative to the request URL
-                                    //    The client should replace all of the data at that location in its cache with the data given in the message
-                                    eventType = FirebaseEventType.Put;
-                                    break;
-                                case "patch":
-                                    // The JSON-encoded data will be an object with two keys: path and data
-                                    //    The path points to a location relative to the request URL
-                                    // For each key in the data, the client should replace the corresponding key in its cache with the data for that key in the message
-                                    eventType = FirebaseEventType.Patch;
-                                    break;
-                                case "keep-alive":
-                                    // The data for this event is null, no action is required
-                                    eventType = FirebaseEventType.None;
-                                    break;
-                                case "cancel":
-                                    // The data for this event is null
-                                    // This event will be sent if the Firebase Realtime Database Rules cause a read at the requested location to no longer be allowed
-                                    eventType = FirebaseEventType.Cancel;
-                                    break;
-                                case "auth_revoked":
-                                    // The data for this event is a string indicating that a the credential has expired
-                                    // This event will be sent when the supplied auth parameter is no longer valid
-                                    throw new UnauthorizedAccessException("The credentials have expired!");
-                            }
-                        }
-
-                        if (line.StartsWith("data: "))
-                        {
-                            line = line.Substring(5).Trim();
-
-                            var json = ValidateMessageData(line);
-
-                            if (eventType == FirebaseEventType.None ||
-                                string.IsNullOrWhiteSpace(json))
-                            {
-                                continue;
-                            }
-
-                            string data;
-                            var jsonResult = JObject.Parse(json);
-
-                            data = jsonResult[nameof(data)]?.Type == JTokenType.Null
-                                ? null
-                                : jsonResult[nameof(data)]?.ToString(Formatting.None);
-
-                            data = data?.Replace("\n", string.Empty);
-
-                            var snapShotResponse = JsonUtility.FromJson<StreamedSnapShotResponse>(json);
-
-                            if (snapShotResponse == null)
-                            {
-                                snapShotResponse = new StreamedSnapShotResponse();
-                            }
-
-                            snapShotResponse.Data = data;
-                            cancellationToken.ThrowIfCancellationRequested();
-                            responseHandler(eventType, snapShotResponse);
-                        }
+                    if (eventType == FirebaseEventType.None ||
+                        string.IsNullOrWhiteSpace(json))
+                    {
+                        continue;
                     }
 
-                    response.RequestMessage.Dispose();
+                    string data;
+                    var jsonResult = JObject.Parse(json);
+                    data = jsonResult[nameof(data)]?.Type == JTokenType.Null
+                        ? null
+                        : jsonResult[nameof(data)]?.ToString(Formatting.None);
+                    data = data?.Replace("\n", string.Empty);
+                    var snapShotResponse = JsonUtility.FromJson<StreamedSnapShotResponse>(json) ?? new StreamedSnapShotResponse();
+                    snapShotResponse.Data = data;
+                    cancellationToken.ThrowIfCancellationRequested();
+                    responseHandler(eventType, snapShotResponse);
                 }
             }
+
+            response.RequestMessage.Dispose();
         }
 
-        private async Task<HttpResponseMessage> ListenAsync(string endpoint, CancellationToken cancellationToken)
+        private async Task<HttpResponseMessage> ListenAsync(string endpoint, CancellationToken cancellationToken = default)
         {
             // Create HTTP Client which will allow auto redirect as required by Firebase
             HttpClientHandler httpClientHandler = new HttpClientHandler
@@ -261,34 +239,33 @@ namespace Firebase.RealtimeDatabase
             var httpClient = new HttpClient(httpClientHandler, true);
             httpClient.BaseAddress = new Uri(DatabaseEndpoint);
             httpClient.Timeout = TimeSpan.FromSeconds(60);
-            var requestUri = new Uri(await GetAuthenticatedEndpointAsync(endpoint));
-
+            var requestUri = new Uri(await GetAuthenticatedEndpointAsync(endpoint).ConfigureAwait(false));
             var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
-
-            var response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            var response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
-
             return response;
         }
 
-        /// <summary>
-        /// Deletes data at the specified endpoint.
-        /// </summary>
-        /// <param name="endpoint">The endpoint to delete the data at.</param>
-        public async Task DeleteDataSnapshotAsync(string endpoint)
-            => await DeleteDataSnapshotAsync(endpoint, CancellationToken.None);
+        [Obsolete("Use DeleteSnapshotAsync instead")]
+        public async Task DeleteDataSnapshotAsync(string endpoint, CancellationToken cancellationToken = default)
+            => await DeleteSnapshotAsync(endpoint, cancellationToken).ConfigureAwait(false);
 
         /// <summary>
         /// Deletes data at the specified endpoint.
         /// </summary>
         /// <param name="endpoint">The endpoint to delete the data at.</param>
-        /// <param name="cancellationToken"></param>
-        public async Task DeleteDataSnapshotAsync(string endpoint, CancellationToken cancellationToken)
+        /// <param name="cancellationToken">Optional, <see cref="CancellationToken"/></param>
+        public async Task DeleteSnapshotAsync(string endpoint, CancellationToken cancellationToken = default)
         {
-            var idToken = await AuthenticationClient.User.GetIdTokenAsync();
-            var response = await HttpClient.DeleteAsync($"{DatabaseEndpoint}{endpoint}.json?auth={idToken}", cancellationToken);
-            response.Dispose();
+            var idToken = await AuthenticationClient.User.GetIdTokenAsync().ConfigureAwait(false);
+            var response = await HttpClient.DeleteAsync($"{DatabaseEndpoint}{endpoint}.json?auth={idToken}", cancellationToken).ConfigureAwait(false);
+            var message = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+
+            if (message.Contains("error"))
+            {
+                throw new FirebaseRealtimeDatabaseException(message);
+            }
         }
 
         private static string ValidateMessageData(string message)

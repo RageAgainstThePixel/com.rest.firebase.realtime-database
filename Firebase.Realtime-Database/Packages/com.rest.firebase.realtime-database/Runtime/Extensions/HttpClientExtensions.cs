@@ -27,9 +27,7 @@ namespace Firebase.RealtimeDatabase.Extensions
         /// <exception cref="ArgumentNullException">The <paramref name="client"/> was null.</exception>
         /// <exception cref="ArgumentNullException">The <paramref name="requestUri"/> was null.</exception>
         public static Task<HttpResponseMessage> PatchAsync(this HttpClient client, string requestUri, HttpContent content)
-        {
-            return PatchAsync(client, CreateUri(requestUri), content);
-        }
+            => PatchAsync(client, CreateUri(requestUri), content);
 
         /// <summary>
         /// Send a PATCH request to the specified Uri as an asynchronous operation.
@@ -43,9 +41,7 @@ namespace Firebase.RealtimeDatabase.Extensions
         /// <exception cref="ArgumentNullException">The <paramref name="client"/> was null.</exception>
         /// <exception cref="ArgumentNullException">The <paramref name="requestUri"/> was null.</exception>
         public static Task<HttpResponseMessage> PatchAsync(this HttpClient client, Uri requestUri, HttpContent content)
-        {
-            return PatchAsync(client, requestUri, content, CancellationToken.None);
-        }
+            => PatchAsync(client, requestUri, content, CancellationToken.None);
 
         /// <summary>
         /// Send a PATCH request with a cancellation token as an asynchronous operation.
@@ -60,9 +56,7 @@ namespace Firebase.RealtimeDatabase.Extensions
         /// <exception cref="ArgumentNullException">The <paramref name="client"/> was null.</exception>
         /// <exception cref="ArgumentNullException">The <paramref name="requestUri"/> was null.</exception>
         public static Task<HttpResponseMessage> PatchAsync(this HttpClient client, string requestUri, HttpContent content, CancellationToken cancellationToken)
-        {
-            return PatchAsync(client, CreateUri(requestUri), content, cancellationToken);
-        }
+            => PatchAsync(client, CreateUri(requestUri), content, cancellationToken);
 
         /// <summary>
         /// Send a PATCH request with a cancellation token as an asynchronous operation.
@@ -78,16 +72,12 @@ namespace Firebase.RealtimeDatabase.Extensions
         /// <exception cref="ArgumentNullException">The <paramref name="requestUri"/> was null.</exception>
         public static Task<HttpResponseMessage> PatchAsync(this HttpClient client, Uri requestUri, HttpContent content, CancellationToken cancellationToken)
         {
-            using (var httpRequest = new HttpRequestMessage(patch, requestUri))
-            {
-                httpRequest.Content = content;
-                return client.SendAsync(httpRequest, cancellationToken);
-            }
+            using var httpRequest = new HttpRequestMessage(patch, requestUri);
+            httpRequest.Content = content;
+            return client.SendAsync(httpRequest, cancellationToken);
         }
 
         private static Uri CreateUri(string uri)
-        {
-            return string.IsNullOrEmpty(uri) ? null : new Uri(uri, UriKind.RelativeOrAbsolute);
-        }
+            => string.IsNullOrEmpty(uri) ? null : new Uri(uri, UriKind.RelativeOrAbsolute);
     }
 }

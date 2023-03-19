@@ -1,9 +1,9 @@
 {
   "name": "com.rest.firebase.realtime-database",
   "displayName": "Firebase.Realtime-Database",
-  "description": "A non-official Firebase Realtime-Database RESTful client.",
+  "description": "A non-official Firebase RESTful Realtime-Database Client for Unity (UPM)",
   "keywords": [],
-  "version": "2.0.0",
+  "version": "2.1.0",
   "unity": "2021.3",
   "documentationUrl": "https://github.com/RageAgainstThePixel/com.rest.firebase.realtime-database#documentation",
   "changelogUrl": "https://github.com/RageAgainstThePixel/com.rest.firebase.realtime-database/releases",
@@ -17,7 +17,7 @@
     "url": "https://github.com/StephenHodgson"
   },
   "dependencies": {
-    "com.rest.firebase.authentication": "2.0.0"
+    "com.rest.firebase.authentication": "2.1.1"
   },
   "publishConfig": {
     "registry": "https://package.openupm.com"
