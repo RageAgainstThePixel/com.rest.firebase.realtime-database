@@ -9,6 +9,7 @@ using System.Data;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Utilities.Async;
 
 namespace Firebase.RealtimeDatabase
 {
@@ -30,9 +31,7 @@ namespace Firebase.RealtimeDatabase
         /// </remarks>
         public DatabaseEndpoint(FirebaseRealtimeDatabaseClient client, T value, string endpoint = null, JsonSerializerSettings jsonSerializerSettings = null)
             : this(client, endpoint, true, jsonSerializerSettings)
-        {
-            Value = value;
-        }
+            => Value = value;
 
         /// <summary>
         /// Creates a new <see cref="DatabaseEndpoint{T}"/> instance for the specified endpoint.
@@ -65,10 +64,7 @@ namespace Firebase.RealtimeDatabase
             }
         }
 
-        ~DatabaseEndpoint()
-        {
-            Dispose(false);
-        }
+        ~DatabaseEndpoint() => Dispose(false);
 
         private void Dispose(bool disposing)
         {
@@ -116,7 +112,7 @@ namespace Firebase.RealtimeDatabase
         public T Value
         {
             get => value;
-            set => UpdateDataSnapshot(value);
+            set => PatchSnapshot(value);
         }
 
         public static implicit operator T(DatabaseEndpoint<T> endpoint)
@@ -134,26 +130,18 @@ namespace Firebase.RealtimeDatabase
         /// <inheritdoc />
         public override bool Equals(object @object)
         {
-            switch (@object)
+            return @object switch
             {
-                case DatabaseEndpoint<T> otherEndpoint:
-                    return Equals(otherEndpoint);
-                case T otherValue:
-                    return Equals(otherValue);
-                default:
-                    return false;
-            }
+                DatabaseEndpoint<T> otherEndpoint => Equals(otherEndpoint),
+                T otherValue => Equals(otherValue),
+                _ => false
+            };
         }
 
         public bool Equals(DatabaseEndpoint<T> other)
-        {
-            if (other is null)
-            {
-                return false;
-            }
-
-            return Equals(other.Value) && EndPoint == other.EndPoint;
-        }
+            => other is not null &&
+               Equals(other.Value) &&
+               EndPoint == other.EndPoint;
 
         public bool Equals(T other) => EqualityComparer<T>.Default.Equals(value, other);
 
@@ -168,14 +156,7 @@ namespace Firebase.RealtimeDatabase
         }
 
         public static bool operator ==(DatabaseEndpoint<T> left, T right)
-        {
-            if (left is null)
-            {
-                return false;
-            }
-
-            return left.Equals(right);
-        }
+            => left is not null && left.Equals(right);
 
         public static bool operator !=(DatabaseEndpoint<T> left, T right)
             => !(left == right);
@@ -208,20 +189,21 @@ namespace Firebase.RealtimeDatabase
 
         #endregion Equality
 
-        private async void SyncDataSnapshot()
-            => await GetDataSnapshotAsync();
+        [Obsolete("Use GetSnapshotAsync")]
+        public async Task<T> GetDataSnapshotAsync()
+            => await GetSnapshotAsync().ConfigureAwait(false);
 
         /// <summary>
         /// Manually get the current value of the <see cref="EndPoint"/>.
         /// </summary>
         /// <returns>The current value of the <see cref="EndPoint"/>.</returns>
-        public async Task<T> GetDataSnapshotAsync()
+        public async Task<T> GetSnapshotAsync()
         {
             string snapshot;
 
             try
             {
-                snapshot = await client.GetDataSnapshotAsync(EndPoint, cancellationTokenSource.Token);
+                snapshot = await client.GetSnapshotAsync(EndPoint, cancellationTokenSource.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -234,29 +216,40 @@ namespace Firebase.RealtimeDatabase
             }
 
             json = snapshot;
-            ParseAndSetValue(json);
+            value = !string.IsNullOrWhiteSpace(json)
+                ? JsonConvert.DeserializeObject<T>(json, SerializerSettings)
+                : default;
+            // Raise events on unity main thread
+            await Awaiters.UnityMainThread;
+            OnValueChanged?.Invoke(value);
 
             return Value;
         }
+
+        [Obsolete("Use PutSnapshotAsync")]
+        public async Task SetDataSnapshotAsync(T newValue)
+            => await PutSnapshotAsync(newValue).ConfigureAwait(false);
 
         /// <summary>
         /// Manually set the <see cref="EndPoint"/> to the <see cref="newValue"/> provided.
         /// </summary>
         /// <param name="newValue">The <see cref="newValue"/> to set at the <see cref="EndPoint"/>.</param>
         /// <remarks>This will completely overwrite any existing data at the endpoint.</remarks>
-        public async Task SetDataSnapshotAsync(T newValue)
+        public async Task PutSnapshotAsync(T newValue)
         {
             var newValueJson = JsonConvert.SerializeObject(newValue, SerializerSettings);
             json = newValueJson;
             value = newValue;
-            await SetDataSnapshotAsync(newValueJson);
+            await PutSnapshotAsync(newValueJson).ConfigureAwait(false);
         }
 
-        private async Task SetDataSnapshotAsync(string newValue)
+        private async Task PutSnapshotAsync(string newValue)
         {
             try
             {
-                await client.SetDataSnapshotAsync(EndPoint, newValue, cancellationTokenSource.Token);
+                await client.PutSnapshotAsync(EndPoint, newValue, cancellationTokenSource.Token).ConfigureAwait(false);
+                // Raise events on unity main thread
+                await Awaiters.UnityMainThread;
                 OnValueChanged?.Invoke(value);
             }
             catch (OperationCanceledException)
@@ -269,26 +262,32 @@ namespace Firebase.RealtimeDatabase
             }
         }
 
-        private async void UpdateDataSnapshot(T newValue)
-            => await UpdateDataSnapshotAsync(newValue);
+        private async void PatchSnapshot(T newValue)
+            => await PatchSnapshotAsync(newValue).ConfigureAwait(false);
+
+        [Obsolete("Use PatchSnapshotAsync")]
+        public async Task UpdateDataSnapshotAsync(T newValue)
+            => await PatchSnapshotAsync(newValue).ConfigureAwait(false);
 
         /// <summary>
         /// Manually update or set the <see cref="EndPoint"/> to the <see cref="newValue"/> provided.
         /// </summary>
         /// <param name="newValue">The <see cref="newValue"/> to set at the <see cref="EndPoint"/>.</param>
-        public async Task UpdateDataSnapshotAsync(T newValue)
+        public async Task PatchSnapshotAsync(T newValue)
         {
             var newValueJson = JsonConvert.SerializeObject(newValue, SerializerSettings);
             json = newValueJson;
             value = newValue;
-            await UpdateDataSnapshotAsync(newValueJson);
+            await PatchSnapshotAsync(newValueJson).ConfigureAwait(false);
         }
 
-        private async Task UpdateDataSnapshotAsync(string newValue)
+        private async Task PatchSnapshotAsync(string newValue)
         {
             try
             {
-                await client.UpdateDataSnapshotAsync(EndPoint, newValue, cancellationTokenSource.Token);
+                await client.PatchSnapshotAsync(EndPoint, newValue, cancellationTokenSource.Token).ConfigureAwait(false);
+                // Raise events on unity main thread
+                await Awaiters.UnityMainThread;
                 OnValueChanged?.Invoke(value);
             }
             catch (OperationCanceledException)
@@ -311,7 +310,7 @@ namespace Firebase.RealtimeDatabase
 
             try
             {
-                await client.DeleteDataSnapshotAsync(json, cancellationTokenSource.Token);
+                await client.DeleteSnapshotAsync(json, cancellationTokenSource.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -327,7 +326,7 @@ namespace Firebase.RealtimeDatabase
         {
             try
             {
-                await client.StreamDataSnapshotChangesAsync(EndPoint, OnDatabaseEndpointValueChanged, cancellationToken);
+                await client.StreamDataSnapshotChangesAsync(EndPoint, OnDatabaseEndpointValueChanged, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -339,14 +338,6 @@ namespace Firebase.RealtimeDatabase
             }
         }
 
-        private void ParseAndSetValue(string jsonValue)
-        {
-            value = !string.IsNullOrWhiteSpace(jsonValue)
-                ? JsonConvert.DeserializeObject<T>(jsonValue, SerializerSettings)
-                : default;
-            OnValueChanged?.Invoke(value);
-        }
-
         private async void OnDatabaseEndpointValueChanged(FirebaseEventType eventType, StreamedSnapShotResponse snapshot)
         {
             switch (eventType)
@@ -355,7 +346,9 @@ namespace Firebase.RealtimeDatabase
                     break;
                 case FirebaseEventType.Put:
                 case FirebaseEventType.Patch:
-                    var updatedValue = await GetDataSnapshotAsync();
+                    var updatedValue = await GetSnapshotAsync().ConfigureAwait(false);
+                    // raise events on main thread.
+                    await Awaiters.UnityMainThread;
                     OnValueChanged?.Invoke(updatedValue);
                     break;
                 case FirebaseEventType.Cancel:
