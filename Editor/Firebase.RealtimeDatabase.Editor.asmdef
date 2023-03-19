@@ -1,5 +1,6 @@
 {
     "name": "Firebase.RealtimeDatabase.Editor",
+    "rootNamespace": "Firebase.RealtimeDatabase.Editor",
     "references": [],
     "includePlatforms": [],
     "excludePlatforms": [],

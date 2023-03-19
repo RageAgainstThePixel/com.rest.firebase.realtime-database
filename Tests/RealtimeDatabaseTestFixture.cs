@@ -1,10 +1,10 @@
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using Firebase.Authentication;
-using Firebase.Authentication.Tests;
 using NUnit.Framework;
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using UnityEngine;
 
 namespace Firebase.RealtimeDatabase.Tests
@@ -40,113 +40,95 @@ namespace Firebase.RealtimeDatabase.Tests
         }
 
         [Test]
-        public void Test_1_Setup()
+        public async Task Test_1_Setup()
         {
             var authClient = new FirebaseAuthenticationClient();
-            UnityTestUtils.RunAsyncTestsAsSync(async () =>
-            {
-                var user = await authClient.CreateUserWithEmailAndPasswordAsync("test@email.com", "tempP@ssw0rd", "test user");
-                Assert.IsNotNull(user);
-                databaseClient = new FirebaseRealtimeDatabaseClient(authClient);
-                Assert.IsNotNull(databaseClient);
-                endpoint = new DatabaseEndpoint<TestJson>(databaseClient, "test");
-                Assert.IsNotNull(endpoint);
-            });
+            var user = await authClient.CreateUserWithEmailAndPasswordAsync("test@email.com", "tempP@ssw0rd", "test user");
+            Assert.IsNotNull(user);
+            databaseClient = new FirebaseRealtimeDatabaseClient(authClient);
+            Assert.IsNotNull(databaseClient);
+            endpoint = new DatabaseEndpoint<TestJson>(databaseClient, "test");
+            Assert.IsNotNull(endpoint);
         }
 
         [Test]
-        public void Test_2_SetData()
-        {
-            UnityTestUtils.RunAsyncTestsAsSync(async () =>
-            {
-                Assert.IsNotNull(endpoint);
-                var result = await endpoint.GetDataSnapshotAsync();
-                Assert.IsNull(result);
-                Assert.IsNull(endpoint.Value);
-                await endpoint.SetDataSnapshotAsync(new TestJson(42, new List<int> { 0, 1, 2 }));
-            });
-        }
-
-        [Test]
-        public void Test_3_GetData()
-        {
-            UnityTestUtils.RunAsyncTestsAsSync(async () =>
-            {
-                Assert.IsNotNull(endpoint);
-                var endpointResult = await endpoint.GetDataSnapshotAsync();
-
-                TestJson testJson = endpoint;
-
-                Assert.IsTrue(endpoint == endpointResult);
-                Assert.IsNotNull(testJson);
-                Assert.IsTrue(testJson.Value == 42);
-                Assert.IsNotEmpty(testJson.Values);
-                Assert.IsTrue(testJson.Values.Contains(0));
-                Assert.IsTrue(testJson.Values.Contains(1));
-                Assert.IsTrue(testJson.Values.Contains(2));
-            });
-        }
-
-        [Test]
-        public void Test_4_UpdateData()
-        {
-            UnityTestUtils.RunAsyncTestsAsSync(async () =>
-            {
-                Assert.IsNotNull(endpoint);
-                var endpointResult = await endpoint.GetDataSnapshotAsync();
-
-                TestJson testJson = endpoint;
-
-                Assert.IsTrue(endpoint == endpointResult);
-                Assert.IsNotNull(testJson);
-                Assert.IsTrue(testJson.Value == 42);
-                Assert.IsNotEmpty(testJson.Values);
-                Assert.IsTrue(testJson.Values.Contains(0));
-                Assert.IsTrue(testJson.Values.Contains(1));
-                Assert.IsTrue(testJson.Values.Contains(2));
-                testJson.Values.Add(9001);
-                testJson.Value = 128;
-                await endpoint.UpdateDataSnapshotAsync(testJson);
-                endpointResult = await endpoint.GetDataSnapshotAsync();
-                Assert.IsTrue(endpoint == endpointResult);
-                Assert.IsNotNull(testJson);
-                Assert.IsTrue(testJson.Value == 128);
-                Assert.IsNotEmpty(testJson.Values);
-                Assert.IsTrue(testJson.Values.Contains(0));
-                Assert.IsTrue(testJson.Values.Contains(1));
-                Assert.IsTrue(testJson.Values.Contains(2));
-                Assert.IsTrue(testJson.Values.Contains(9001));
-            });
-        }
-
-        [Test]
-        public void Test_5_DeleteData()
+        public async Task Test_2_PutData()
         {
             Assert.IsNotNull(endpoint);
-            UnityTestUtils.RunAsyncTestsAsSync(async () =>
-            {
-                await endpoint.DeleteSnapshotAsync();
-                var result = await databaseClient.GetDataSnapshotAsync("test");
-                Assert.IsNull(result);
-                await endpoint.GetDataSnapshotAsync();
-                Assert.IsNull(endpoint.Value);
-            });
+            var result = await endpoint.GetSnapshotAsync();
+            Assert.IsNull(result);
+            Assert.IsNull(endpoint.Value);
+            await endpoint.PutSnapshotAsync(new TestJson(42, new List<int> { 0, 1, 2 }));
         }
 
         [Test]
-        public void Test_6_TearDown()
+        public async Task Test_3_GetData()
         {
-            UnityTestUtils.RunAsyncTestsAsSync(async () =>
-            {
-                Assert.IsNull(endpoint.Value);
-                endpoint.Dispose();
-                endpoint = null;
-                Assert.IsNull(endpoint);
-                var authClient = new FirebaseAuthenticationClient();
-                var user = await authClient.SignInWithEmailAndPasswordAsync("test@email.com", "tempP@ssw0rd");
-                Assert.IsNotNull(user);
-                await user.DeleteAsync();
-            });
+            Assert.IsNotNull(endpoint);
+            var endpointResult = await endpoint.GetSnapshotAsync();
+
+            TestJson testJson = endpoint;
+
+            Assert.IsTrue(endpoint == endpointResult);
+            Assert.IsNotNull(testJson);
+            Assert.IsTrue(testJson.Value == 42);
+            Assert.IsNotEmpty(testJson.Values);
+            Assert.IsTrue(testJson.Values.Contains(0));
+            Assert.IsTrue(testJson.Values.Contains(1));
+            Assert.IsTrue(testJson.Values.Contains(2));
+        }
+
+        [Test]
+        public async Task Test_4_PatchData()
+        {
+            Assert.IsNotNull(endpoint);
+            var endpointResult = await endpoint.GetSnapshotAsync();
+
+            TestJson testJson = endpoint;
+
+            Assert.IsTrue(endpoint == endpointResult);
+            Assert.IsNotNull(testJson);
+            Assert.IsTrue(testJson.Value == 42);
+            Assert.IsNotEmpty(testJson.Values);
+            Assert.IsTrue(testJson.Values.Contains(0));
+            Assert.IsTrue(testJson.Values.Contains(1));
+            Assert.IsTrue(testJson.Values.Contains(2));
+            testJson.Values.Add(9001);
+            testJson.Value = 128;
+            await endpoint.PatchSnapshotAsync(testJson);
+            endpointResult = await endpoint.GetSnapshotAsync();
+            Assert.IsTrue(endpoint == endpointResult);
+            Assert.IsNotNull(testJson);
+            Assert.IsTrue(testJson.Value == 128);
+            Assert.IsNotEmpty(testJson.Values);
+            Assert.IsTrue(testJson.Values.Contains(0));
+            Assert.IsTrue(testJson.Values.Contains(1));
+            Assert.IsTrue(testJson.Values.Contains(2));
+            Assert.IsTrue(testJson.Values.Contains(9001));
+        }
+
+        [Test]
+        public async Task Test_5_DeleteData()
+        {
+            Assert.IsNotNull(endpoint);
+            await endpoint.DeleteSnapshotAsync();
+            var result = await databaseClient.GetSnapshotAsync("test");
+            Assert.IsNull(result);
+            await endpoint.GetSnapshotAsync();
+            Assert.IsNull(endpoint.Value);
+        }
+
+        [Test]
+        public async Task Test_6_TearDown()
+        {
+            Assert.IsNull(endpoint.Value);
+            endpoint.Dispose();
+            endpoint = null;
+            Assert.IsNull(endpoint);
+            var authClient = new FirebaseAuthenticationClient();
+            var user = await authClient.SignInWithEmailAndPasswordAsync("test@email.com", "tempP@ssw0rd");
+            Assert.IsNotNull(user);
+            await user.DeleteAsync();
         }
     }
 }
